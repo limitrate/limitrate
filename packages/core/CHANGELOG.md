@@ -1,5 +1,11 @@
 # @limitrate/core
 
+## 1.0.1
+
+### Patch Changes
+
+- 5e1ed92: Fix critical bug where rate limit headers showed 0 and rate limiting was non-functional. The PolicyEngine was discarding rate limit details when requests were allowed, causing all limits to show as 0 and preventing proper enforcement.
+
 ## 1.0.0
 
 ### Major Changes

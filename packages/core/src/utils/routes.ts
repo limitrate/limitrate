@@ -60,7 +60,9 @@ function isLikelyId(value: string): boolean {
   }
 
   // Short ID / nanoid (common patterns)
-  if (value.length >= 10 && /^[A-Za-z0-9_-]+$/.test(value)) {
+  // Only treat as ID if it looks random (not kebab-case words)
+  // Kebab-case words like "free-strict" should NOT be treated as IDs
+  if (value.length >= 16 && /^[A-Za-z0-9_-]+$/.test(value) && !/^[a-z]+(-[a-z]+)+$/.test(value)) {
     return true;
   }
 

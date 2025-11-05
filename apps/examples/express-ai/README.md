@@ -150,7 +150,7 @@ cost: {
 
 3. **Monitor with webhooks:**
    ```typescript
-   webhookUrl: 'https://your-app.com/webhooks/fairgate',
+   webhookUrl: 'https://your-app.com/webhooks/limitrate',
    onEvent: (event) => {
      if (event.type === 'cost_exceeded') {
        // Alert your team

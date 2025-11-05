@@ -11,7 +11,7 @@ Complete guide to set up npm publishing for LimitRate v1.0.
 1. **Create Organization**
    - Go to: https://github.com/organizations/plan
    - Click "Create a free organization"
-   - Name: `fairgate` (or `fairgate-dev` if taken)
+   - Name: `limitrate` (or `limitrate-dev` if taken)
    - Email: Your email
    - Select: "My personal account"
    - Make it public (free for open source)
@@ -20,14 +20,14 @@ Complete guide to set up npm publishing for LimitRate v1.0.
    - Go to current repo: Settings → General
    - Scroll to "Danger Zone"
    - Click "Transfer ownership"
-   - New owner: `fairgate` (your new org)
+   - New owner: `limitrate` (your new org)
    - Type repo name to confirm
    - Click "I understand, transfer this repository"
 
 3. **Update Repository URLs**
    ```bash
    # Update git remote (if transferred)
-   git remote set-url origin git@github.com:fairgate/fairgate.git
+   git remote set-url origin git@github.com:limitrate/limitrate.git
 
    # Verify
    git remote -v
@@ -45,7 +45,7 @@ If you prefer to keep it under your personal account, that's fine too. Just skip
 
 1. Go to: https://www.npmjs.com/signup
 2. Fill in:
-   - **Username**: `fairgate` or your preferred name (publicly visible)
+   - **Username**: `limitrate` or your preferred name (publicly visible)
    - **Email**: Your main email
    - **Password**: Strong password (use password manager)
 3. Verify email (check inbox)
@@ -105,7 +105,7 @@ npm profile get
 
 **Option A: Via Web**
 1. Go to: https://www.npmjs.com/org/create
-2. Organization name: `fairgate`
+2. Organization name: `limitrate`
 3. Select: "Unlimited public packages (free)"
 4. Add billing info (won't be charged for public packages)
 5. Click "Create"
@@ -113,15 +113,15 @@ npm profile get
 **Option B: Via CLI**
 ```bash
 # Create organization
-npm org create fairgate
+npm org create limitrate
 
 # When prompted, choose "unlimited public" (free)
 ```
 
 **Verify it exists:**
 ```bash
-npm org ls fairgate
-# Should show: fairgate (you)
+npm org ls limitrate
+# Should show: limitrate (you)
 ```
 
 ### Step 6: Generate Automation Token
@@ -134,7 +134,7 @@ npm token create
 
 # When prompted:
 # - Token type: Choose "Publish" (allows publishing packages)
-# - Organizations: Select "fairgate" (or leave default for all)
+# - Organizations: Select "limitrate" (or leave default for all)
 # - Expiration: Choose "No expiration" or "Custom" (1 year recommended)
 ```
 
@@ -158,7 +158,7 @@ npm_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
 
 1. Go to your GitHub repository
    - If transferred: `https://github.com/limitrate/limitrate`
-   - If personal: `https://github.com/YOUR_USERNAME/fairgate`
+   - If personal: `https://github.com/YOUR_USERNAME/limitrate`
 
 2. Click: **Settings** → **Secrets and variables** → **Actions**
 
@@ -189,7 +189,7 @@ If you transferred to an organization, update these files:
 {
   "repository": {
     "type": "git",
-    "url": "https://github.com/YOUR_OLD_USERNAME/fairgate"
+    "url": "https://github.com/YOUR_OLD_USERNAME/limitrate"
   }
 }
 ```
@@ -216,8 +216,8 @@ If you transferred to an organization, update these files:
 
 **Quick find and replace:**
 ```bash
-# If you transferred to 'fairgate' org
-find . -name "package.json" -type f -exec sed -i '' 's|github.com/YOUR_OLD_USERNAME/fairgate|github.com/limitrate/limitrate|g' {} +
+# If you transferred to 'limitrate' org
+find . -name "package.json" -type f -exec sed -i '' 's|github.com/YOUR_OLD_USERNAME/limitrate|github.com/limitrate/limitrate|g' {} +
 
 # Verify changes
 git diff
@@ -235,7 +235,7 @@ npm whoami
 
 ### Test 2: Check Organization Access
 ```bash
-npm org ls fairgate
+npm org ls limitrate
 # Should show you as a member
 ```
 
@@ -354,8 +354,8 @@ After the workflow completes (5-10 minutes):
 2. **Test installation:**
 ```bash
 # Create temp directory
-mkdir /tmp/fairgate-test
-cd /tmp/fairgate-test
+mkdir /tmp/limitrate-test
+cd /tmp/limitrate-test
 
 # Test install from npm
 npm init -y
@@ -366,7 +366,7 @@ node -e "console.log(require('@limitrate/express'))"
 # Should show module exports
 
 # Cleanup
-cd ~ && rm -rf /tmp/fairgate-test
+cd ~ && rm -rf /tmp/limitrate-test
 ```
 
 ### Create GitHub Release
@@ -390,7 +390,7 @@ cd ~ && rm -rf /tmp/fairgate-test
 npm whoami
 
 # Check org membership
-npm org ls fairgate
+npm org ls limitrate
 
 # If not a member, join the org via npm website
 # Or make sure packages specify correct "publishConfig"
@@ -455,7 +455,7 @@ Add to each package.json:
 npm whoami
 
 # Check org access
-npm org ls fairgate
+npm org ls limitrate
 
 # Create changeset
 pnpm changeset

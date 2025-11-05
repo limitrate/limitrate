@@ -66,7 +66,7 @@ return {newCost, true, cap - newCost, ttl, cap}
 export interface RedisStoreOptions {
   /** Redis connection URL or ioredis instance */
   client?: Redis | string;
-  /** Key prefix for all FairGate keys */
+  /** Key prefix for all LimitRate keys */
   keyPrefix?: string;
   /** Redis client options (if URL provided) */
   redisOptions?: any;
@@ -78,7 +78,7 @@ export class RedisStore implements Store {
   private keyPrefix: string;
 
   constructor(options: RedisStoreOptions = {}) {
-    this.keyPrefix = options.keyPrefix ?? 'fairgate:';
+    this.keyPrefix = options.keyPrefix ?? 'limitrate:';
     this.ownClient = false;
 
     if (options.client instanceof Redis) {

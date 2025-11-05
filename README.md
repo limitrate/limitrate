@@ -256,7 +256,7 @@ npx limitrate inspect
 - Cost-exceeded events
 - Rate-exceeded events
 
-**Storage**: SQLite database at `.fairgate/events.db` (auto-pruned after 48 hours)
+**Storage**: SQLite database at `.limitrate/events.db` (auto-pruned after 48 hours)
 
 ---
 
@@ -274,7 +274,7 @@ store: { type: 'memory' }
 store: {
   type: 'redis',
   url: process.env.REDIS_URL,
-  keyPrefix: 'fairgate:'
+  keyPrefix: 'limitrate:'
 }
 ```
 
@@ -300,7 +300,7 @@ store: {
 ```typescript
 onEvent: async (event) => {
   if (event.type === 'cost_exceeded') {
-    await fetch('https://yourapp.com/webhooks/fairgate', {
+    await fetch('https://yourapp.com/webhooks/limitrate', {
       method: 'POST',
       body: JSON.stringify(event)
     });

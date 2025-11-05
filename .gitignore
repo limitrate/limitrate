@@ -32,8 +32,8 @@ Thumbs.db
 coverage/
 .nyc_output/
 
-# FairGate specific
-.fairgate/
+# LimitRate specific
+.limitrate/
 
 # Temporary
 tmp/

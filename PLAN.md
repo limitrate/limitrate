@@ -27,7 +27,7 @@ Drop in 20 lines of config, never worry about bots draining your AI budget or us
 - Apache-2.0 license
 
 ### Paid Cloud (v2+)
-- **SaaS Dashboard** (dashboard.fairgate.cloud)
+- **SaaS Dashboard** (dashboard.limitrate.cloud)
 - **Cloud Connector** (opt-in, streams events to cloud)
 - Live rule changes (no redeploy)
 - Managed alerts (Slack/email/PagerDuty)
@@ -49,7 +49,7 @@ Drop in 20 lines of config, never worry about bots draining your AI budget or us
 
 ### Packages
 ```
-fairgate/
+limitrate/
 ├── packages/
 │   ├── core/           # @limitrate/core (algorithms, stores, policies)
 │   ├── express/        # @limitrate/express (Express middleware)
@@ -271,7 +271,7 @@ emitter.on('limit_exceeded', (event) => { ... });
 
 **API:**
 ```typescript
-import { fairgate, withPolicy } from '@limitrate/express';
+import { limitrate, withPolicy } from '@limitrate/express';
 
 interface LimitRateOptions {
   identifyUser: (req: Request) => string;
@@ -348,7 +348,7 @@ Content-Type: application/json
 - Output: terminal table or web UI (http://localhost:7777)
 
 **Storage:**
-- SQLite file: `.fairgate/history.db` (auto-created)
+- SQLite file: `.limitrate/history.db` (auto-created)
 - Schema:
   ```sql
   CREATE TABLE events (
@@ -507,7 +507,7 @@ import { connectCloud } from '@limitrate/cloud';
 const gate = limitrate({
   // ... existing config
   cloud: connectCloud({
-    apiKey: process.env.FAIRGATE_API_KEY,
+    apiKey: process.env.LIMITRATE_API_KEY,
     projectId: 'proj_123',
     sampling: {
       allowed: 0.1,        // Sample 10% of "allowed" events
@@ -528,7 +528,7 @@ const gate = limitrate({
 ### Self-Hosted Dashboard (v3)
 
 **For enterprises requiring on-premises:**
-- Docker image: `fairgate/dashboard:latest`
+- Docker image: `limitrate/dashboard:latest`
 - Runs in customer infrastructure
 - All data stays on-premises
 - SSO/SAML integration
@@ -762,7 +762,7 @@ if (store.type === 'memory' && process.env.NODE_ENV === 'production') {
 
 ### v2.0 (2026): SaaS Dashboard
 - ✅ Cloud connector (opt-in)
-- ✅ Hosted dashboard (dashboard.fairgate.cloud)
+- ✅ Hosted dashboard (dashboard.limitrate.cloud)
 - ✅ Live rule changes (no redeploy)
 - ✅ Managed Slack/email alerts
 - ✅ Multi-environment (dev/staging/prod)

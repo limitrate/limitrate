@@ -27,9 +27,9 @@ export interface TopOffender {
 export class EventStorage {
   private db: Database.Database;
 
-  constructor(dbPath: string = '.fairgate/history.db') {
+  constructor(dbPath: string = '.limitrate/history.db') {
     // Ensure directory exists
-    const dir = join(process.cwd(), '.fairgate');
+    const dir = join(process.cwd(), '.limitrate');
     if (!existsSync(dir)) {
       mkdirSync(dir, { recursive: true });
     }

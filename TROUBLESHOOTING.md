@@ -467,7 +467,7 @@ If you don't see this message, CLI package is not installed or not detected.
 **3. Wrong Directory**
 
 ```bash
-# CLI looks for .fairgate/history.db in current directory
+# CLI looks for .limitrate/history.db in current directory
 cd /path/to/your/project
 npx limitrate inspect
 ```
@@ -487,7 +487,7 @@ Events are auto-deleted after 48 hours. Check timestamp:
 
 ```bash
 # Check SQLite database directly
-sqlite3 .fairgate/history.db "SELECT COUNT(*) FROM events;"
+sqlite3 .limitrate/history.db "SELECT COUNT(*) FROM events;"
 ```
 
 ---
@@ -623,13 +623,13 @@ webhookUrl: 'http://example.com/webhook'
 
 ```typescript
 // ✅ Solution: Correct HTTPS URL
-webhookUrl: 'https://your-app.com/api/fairgate-webhook'
+webhookUrl: 'https://your-app.com/api/limitrate-webhook'
 ```
 
 Test webhook endpoint:
 
 ```bash
-curl -X POST https://your-app.com/api/fairgate-webhook \
+curl -X POST https://your-app.com/api/limitrate-webhook \
   -H "Content-Type: application/json" \
   -d '{"type":"rate_exceeded","user":"test"}'
 ```
@@ -640,7 +640,7 @@ Check your webhook handler logs:
 
 ```typescript
 // Webhook handler should return 2xx status
-app.post('/api/fairgate-webhook', (req, res) => {
+app.post('/api/limitrate-webhook', (req, res) => {
   console.log('Received event:', req.body);
   res.status(200).send('OK');  // Important!
 });
@@ -698,10 +698,10 @@ ValidationError: [LimitRate] Invalid configuration: maxPerMinute must be > 0
 ## Getting Help
 
 1. **Check logs:** LimitRate logs warnings and errors to console
-2. **Enable debug mode:** Set `DEBUG=fairgate:*` environment variable
+2. **Enable debug mode:** Set `DEBUG=limitrate:*` environment variable
 3. **GitHub Issues:** https://github.com/limitrate/limitrate/issues
 4. **Discord:** [Join our community]
-5. **Stack Overflow:** Tag with `fairgate`
+5. **Stack Overflow:** Tag with `limitrate`
 
 ---
 

@@ -150,17 +150,17 @@ pnpm outdated
 
 ```bash
 # Create temp directory
-mkdir -p /tmp/fairgate-test
-cd /tmp/fairgate-test
+mkdir -p /tmp/limitrate-test
+cd /tmp/limitrate-test
 
 # Initialize test project
 npm init -y
 npm install express
 
 # Install from local tarballs
-npm install /Users/apple/fairgate/packages/core/fairgate-core-0.1.0.tgz
-npm install /Users/apple/fairgate/packages/express/fairgate-express-0.1.0.tgz
-npm install /Users/apple/fairgate/packages/cli/fairgate-cli-0.1.0.tgz
+npm install /Users/apple/limitrate/packages/core/limitrate-core-0.1.0.tgz
+npm install /Users/apple/limitrate/packages/express/limitrate-express-0.1.0.tgz
+npm install /Users/apple/limitrate/packages/cli/limitrate-cli-0.1.0.tgz
 
 # Create test file
 cat > test.js << 'EOF'
@@ -193,7 +193,7 @@ pkill -f "node test.js"
 
 # Cleanup
 cd ~
-rm -rf /tmp/fairgate-test
+rm -rf /tmp/limitrate-test
 ```
 
 **Expected**: Server starts, request succeeds
@@ -269,12 +269,12 @@ After publishing, verify:
 
 2. Test installation from npm:
 ```bash
-mkdir -p /tmp/fairgate-npm-test
-cd /tmp/fairgate-npm-test
+mkdir -p /tmp/limitrate-npm-test
+cd /tmp/limitrate-npm-test
 npm init -y
 npm install @limitrate/express
 node -e "console.log(require('@limitrate/express'))"
-cd ~ && rm -rf /tmp/fairgate-npm-test
+cd ~ && rm -rf /tmp/limitrate-npm-test
 ```
 
 3. Check package READMEs render correctly on npm

@@ -96,7 +96,7 @@ store: { type: 'memory' }
 store: {
   type: 'redis',
   url: process.env.REDIS_URL,
-  keyPrefix: 'fairgate:'
+  keyPrefix: 'limitrate:'
 }
 
 // Upstash (serverless)
@@ -159,7 +159,7 @@ ipBlocklist: ['1.2.3.4', '5.6.7.8']
 Send events to a webhook:
 
 ```typescript
-webhookUrl: 'https://yourapp.com/webhooks/fairgate'
+webhookUrl: 'https://yourapp.com/webhooks/limitrate'
 ```
 
 ### `onEvent` (optional)
@@ -427,7 +427,6 @@ Full TypeScript support with exported types:
 
 ```typescript
 import {
-  fairgate,
   type LimitRateOptions,
   type BlockedResponse,
   type PolicyConfig,

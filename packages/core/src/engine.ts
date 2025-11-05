@@ -91,7 +91,8 @@ export class PolicyEngine {
     // Check rate limit first (if defined)
     if (policy.rate) {
       const rateResult = await this.checkRate(context, policy);
-      if (!rateResult.allowed) {
+      // Return early if blocked OR requires special handling (slowdown, allow-and-log)
+      if (!rateResult.allowed || rateResult.action !== 'allow') {
         return rateResult;
       }
       // Preserve rate limit details for response headers
@@ -101,7 +102,8 @@ export class PolicyEngine {
     // Check cost limit (if defined)
     if (policy.cost) {
       const costResult = await this.checkCost(context, policy);
-      if (!costResult.allowed) {
+      // Return early if blocked OR requires special handling (slowdown, allow-and-log)
+      if (!costResult.allowed || costResult.action !== 'allow') {
         return costResult;
       }
       // If both rate and cost exist, keep rate details for headers

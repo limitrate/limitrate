@@ -1,5 +1,5 @@
 /**
- * Event emitter for FairGate events
+ * Event emitter for LimitRate events
  */
 
 import type { LimitRateEvent } from '../types';

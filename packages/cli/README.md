@@ -49,7 +49,7 @@ Clear all stored events:
 npx limitrate clear
 ```
 
-This removes the SQLite database at `.fairgate/events.db`.
+This removes the SQLite database at `.limitrate/events.db`.
 
 ## Event Storage
 
@@ -98,7 +98,7 @@ saveEvent({
 Events are stored in SQLite at:
 
 ```
-.fairgate/events.db
+.limitrate/events.db
 ```
 
 **Retention**: Events older than 48 hours are automatically pruned.

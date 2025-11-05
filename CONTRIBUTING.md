@@ -20,7 +20,7 @@ Be respectful, constructive, and professional in all interactions.
 ```bash
 # Clone the repository
 git clone https://github.com/limitrate/limitrate.git
-cd fairgate
+cd limitrate
 
 # Install dependencies
 pnpm install
@@ -75,7 +75,7 @@ pnpm lint
 ## Project Structure
 
 ```
-fairgate/
+limitrate/
 ├── packages/
 │   ├── core/          # Core policy engine and stores
 │   ├── express/       # Express middleware

@@ -140,7 +140,7 @@ REDIS_PASSWORD=<strong-random-password>
 
 ```typescript
 // Good: Use HTTPS and authentication
-webhookUrl: 'https://yourapp.com/webhooks/fairgate',
+webhookUrl: 'https://yourapp.com/webhooks/limitrate',
 onEvent: async (event) => {
   await fetch(webhookUrl, {
     method: 'POST',
@@ -153,7 +153,7 @@ onEvent: async (event) => {
 }
 
 // Bad: HTTP without authentication
-webhookUrl: 'http://yourapp.com/webhooks/fairgate'
+webhookUrl: 'http://yourapp.com/webhooks/limitrate'
 ```
 
 ### 6. Rate Limit the Rate Limiter
@@ -235,7 +235,7 @@ Depending on the severity and quality of the report, we may offer:
 
 - **Security Email**: security@limitrate.dev
 - **General Email**: hello@limitrate.dev
-- **GitHub**: [@limitrate](https://github.com/fairgate)
+- **GitHub**: [@limitrate](https://github.com/limitrate)
 
 ---
 

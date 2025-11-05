@@ -67,7 +67,7 @@ export interface UpstashStoreOptions {
   url: string;
   /** Upstash Redis REST token */
   token: string;
-  /** Key prefix for all FairGate keys */
+  /** Key prefix for all LimitRate keys */
   keyPrefix?: string;
 }
 
@@ -80,7 +80,7 @@ export class UpstashStore implements Store {
       throw new Error('UpstashStore requires both url and token');
     }
 
-    this.keyPrefix = options.keyPrefix ?? 'fairgate:';
+    this.keyPrefix = options.keyPrefix ?? 'limitrate:';
     this.client = new Redis({
       url: options.url,
       token: options.token,

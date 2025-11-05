@@ -1,5 +1,5 @@
 /**
- * Core types for FairGate rate limiting and cost control
+ * Core types for LimitRate rate limiting and cost control
  */
 
 export type PlanName = 'free' | 'pro' | 'enterprise' | string;

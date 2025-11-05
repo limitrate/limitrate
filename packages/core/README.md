@@ -61,7 +61,7 @@ import { RedisStore } from '@limitrate/core';
 
 const store = new RedisStore({
   url: 'redis://localhost:6379',
-  keyPrefix: 'fairgate:'
+  keyPrefix: 'limitrate:'
 });
 ```
 

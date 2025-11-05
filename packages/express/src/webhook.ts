@@ -24,7 +24,7 @@ export async function sendToWebhook(event: LimitRateEvent, options: WebhookOptio
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'User-Agent': 'FairGate/0.1.0',
+          'User-Agent': 'LimitRate/1.0.0',
         },
         body: JSON.stringify(event),
         signal: AbortSignal.timeout(5000), // 5s timeout

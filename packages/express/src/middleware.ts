@@ -208,7 +208,7 @@ export function withPolicy(_policy: any): RequestHandler {
   // This will be used to override policies for specific routes
   // Implementation: attach policy to req object, middleware checks it
   return (req: Request, _res: Response, next: NextFunction) => {
-    (req as any).__fairgate_policy = _policy;
+    (req as any).__limitrate_policy = _policy;
     next();
   };
 }

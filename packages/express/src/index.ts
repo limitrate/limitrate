@@ -6,10 +6,6 @@
 export { limitrate, withPolicy } from './middleware';
 export type { LimitRateOptions, BlockedResponse } from './types';
 
-// Backwards compatibility alias (deprecated)
-export { limitrate as fairgate } from './middleware';
-export type { LimitRateOptions as FairGateOptions } from './types';
-
 // Re-export core types for convenience
 export type {
   PlanName,

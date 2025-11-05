@@ -32,6 +32,3 @@ export { ValidationError, validatePolicyConfig, validateStoreConfig, validateIPL
 export { normalizeRoutePath, createEndpointKey, extractIP, isIPInList } from './utils/routes';
 export { EventEmitter } from './utils/events';
 export type { EventHandler } from './utils/events';
-
-// Backwards compatibility alias (deprecated)
-export type { LimitRateEvent as FairGateEvent } from './types';

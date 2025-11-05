@@ -1,6 +1,6 @@
 {
   "name": "@limitrate/cli",
-  "version": "0.1.0",
+  "version": "1.0.0",
   "description": "CLI dashboard for LimitRate rate limiting inspection",
   "main": "./dist/index.js",
   "module": "./dist/index.mjs",

@@ -1,5 +1,12 @@
 # @limitrate/cli
 
+## 1.1.1
+
+### Patch Changes
+
+- Updated dependencies [c8ea5c1]
+  - @limitrate/core@1.1.1
+
 ## 1.1.0
 
 ### Minor Changes

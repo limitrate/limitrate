@@ -85,12 +85,17 @@ export class PolicyEngine {
       };
     }
 
+    // Store details from checks
+    let finalDetails = { used: 0, limit: 0, remaining: 0, resetInSeconds: 0 };
+
     // Check rate limit first (if defined)
     if (policy.rate) {
       const rateResult = await this.checkRate(context, policy);
       if (!rateResult.allowed) {
         return rateResult;
       }
+      // Preserve rate limit details for response headers
+      finalDetails = rateResult.details;
     }
 
     // Check cost limit (if defined)
@@ -99,6 +104,8 @@ export class PolicyEngine {
       if (!costResult.allowed) {
         return costResult;
       }
+      // If both rate and cost exist, keep rate details for headers
+      // Cost tracking is internal, rate limits are what users see
     }
 
     // Both checks passed (or no checks defined)
@@ -113,7 +120,7 @@ export class PolicyEngine {
     return {
       allowed: true,
       action: 'allow',
-      details: { used: 0, limit: 0, remaining: 0, resetInSeconds: 0 },
+      details: finalDetails,
     };
   }
 

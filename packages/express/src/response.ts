@@ -23,11 +23,17 @@ export function setRateLimitHeaders(
   res: Response,
   limit: number,
   remaining: number,
-  resetInSeconds: number
+  resetInSeconds: number,
+  burstTokens?: number
 ): void {
   res.setHeader('RateLimit-Limit', limit.toString());
   res.setHeader('RateLimit-Remaining', Math.max(0, remaining).toString());
   res.setHeader('RateLimit-Reset', (Math.floor(Date.now() / 1000) + resetInSeconds).toString());
+
+  // Add burst tokens header if burst is enabled
+  if (burstTokens !== undefined) {
+    res.setHeader('RateLimit-Burst-Remaining', burstTokens.toString());
+  }
 }
 
 /**

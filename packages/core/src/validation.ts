@@ -20,12 +20,41 @@ function isFunction(value: unknown): value is Function {
 }
 
 function validateRateRule(rule: RateRule, path: string): void {
+  // Validate time window values
+  if (rule.maxPerSecond !== undefined && !isPositiveNumber(rule.maxPerSecond)) {
+    throw new ValidationError(`${path}.maxPerSecond must be a positive number, got: ${rule.maxPerSecond}`);
+  }
+
   if (rule.maxPerMinute !== undefined && !isPositiveNumber(rule.maxPerMinute)) {
     throw new ValidationError(`${path}.maxPerMinute must be a positive number, got: ${rule.maxPerMinute}`);
   }
 
-  if (rule.maxPerSecond !== undefined && !isPositiveNumber(rule.maxPerSecond)) {
-    throw new ValidationError(`${path}.maxPerSecond must be a positive number, got: ${rule.maxPerSecond}`);
+  if (rule.maxPerHour !== undefined && !isPositiveNumber(rule.maxPerHour)) {
+    throw new ValidationError(`${path}.maxPerHour must be a positive number, got: ${rule.maxPerHour}`);
+  }
+
+  if (rule.maxPerDay !== undefined && !isPositiveNumber(rule.maxPerDay)) {
+    throw new ValidationError(`${path}.maxPerDay must be a positive number, got: ${rule.maxPerDay}`);
+  }
+
+  // Ensure exactly one time window is specified
+  const timeWindows = [
+    rule.maxPerSecond,
+    rule.maxPerMinute,
+    rule.maxPerHour,
+    rule.maxPerDay,
+  ].filter(w => w !== undefined);
+
+  if (timeWindows.length === 0) {
+    throw new ValidationError(
+      `${path} must specify exactly one time window (maxPerSecond, maxPerMinute, maxPerHour, or maxPerDay)`
+    );
+  }
+
+  if (timeWindows.length > 1) {
+    throw new ValidationError(
+      `${path} can only specify one time window, but found ${timeWindows.length}. Use separate endpoint policies for multiple limits.`
+    );
   }
 
   if (rule.burst !== undefined && !isPositiveNumber(rule.burst)) {

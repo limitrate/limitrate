@@ -10,6 +10,7 @@ import type {
   PlanName,
   EnforcementAction,
   LimitRateEvent,
+  UserOverride,
 } from './types';
 import { EventEmitter } from './utils/events';
 
@@ -22,6 +23,10 @@ export interface CheckContext {
   endpoint: string;
   /** Optional cost estimation context */
   costContext?: any;
+  /** Optional route-specific policy override */
+  policyOverride?: EndpointPolicy;
+  /** Optional user override (v1.6.0 - B4) */
+  userOverride?: UserOverride | null;
 }
 
 export interface CheckResult {
@@ -41,6 +46,7 @@ export interface CheckResult {
     limit: number;
     remaining: number;
     resetInSeconds: number;
+    burstTokens?: number;
   };
 }
 
@@ -66,7 +72,8 @@ export class PolicyEngine {
    * Check if request should be allowed
    */
   async check(context: CheckContext): Promise<CheckResult> {
-    const policy = this.resolvePolicy(context.plan, context.endpoint);
+    // Use policy override if provided, otherwise resolve from config
+    const policy = context.policyOverride || this.resolvePolicy(context.plan, context.endpoint);
 
     if (!policy) {
       // No policy = allow
@@ -134,17 +141,65 @@ export class PolicyEngine {
       return { allowed: true, action: 'allow', details: { used: 0, limit: 0, remaining: 0, resetInSeconds: 0 } };
     }
 
-    const { maxPerMinute, maxPerSecond, actionOnExceed, slowdownMs } = policy.rate;
+    let { maxPerSecond, maxPerMinute, maxPerHour, maxPerDay, burst, actionOnExceed, slowdownMs } = policy.rate;
 
-    // Use maxPerMinute by default, or maxPerSecond if specified
-    const limit = maxPerSecond ?? maxPerMinute!;
-    const windowSeconds = maxPerSecond ? 1 : 60;
+    // Check for user override (v1.6.0 - B4)
+    // User overrides take precedence over plan limits
+    if (context.userOverride) {
+      const override = context.userOverride;
+
+      // Helper to validate override value
+      const isValidLimit = (val: number | undefined): val is number => {
+        return typeof val === 'number' && val > 0 && !isNaN(val) && isFinite(val);
+      };
+
+      // Check for endpoint-specific override first
+      const endpointOverride = override.endpoints?.[context.endpoint];
+      if (endpointOverride) {
+        if (isValidLimit(endpointOverride.maxPerSecond)) maxPerSecond = endpointOverride.maxPerSecond;
+        if (isValidLimit(endpointOverride.maxPerMinute)) maxPerMinute = endpointOverride.maxPerMinute;
+        if (isValidLimit(endpointOverride.maxPerHour)) maxPerHour = endpointOverride.maxPerHour;
+        if (isValidLimit(endpointOverride.maxPerDay)) maxPerDay = endpointOverride.maxPerDay;
+      } else {
+        // Use global user override
+        if (isValidLimit(override.maxPerSecond)) maxPerSecond = override.maxPerSecond;
+        if (isValidLimit(override.maxPerMinute)) maxPerMinute = override.maxPerMinute;
+        if (isValidLimit(override.maxPerHour)) maxPerHour = override.maxPerHour;
+        if (isValidLimit(override.maxPerDay)) maxPerDay = override.maxPerDay;
+      }
+    }
+
+    // Determine limit and window based on specified time window
+    let limit: number;
+    let windowSeconds: number;
+    let windowLabel: string;
+
+    if (maxPerSecond !== undefined) {
+      limit = maxPerSecond;
+      windowSeconds = 1;
+      windowLabel = '1s';
+    } else if (maxPerMinute !== undefined) {
+      limit = maxPerMinute;
+      windowSeconds = 60;
+      windowLabel = '1m';
+    } else if (maxPerHour !== undefined) {
+      limit = maxPerHour;
+      windowSeconds = 3600;
+      windowLabel = '1h';
+    } else if (maxPerDay !== undefined) {
+      limit = maxPerDay;
+      windowSeconds = 86400;
+      windowLabel = '1d';
+    } else {
+      // Should never reach here due to validation
+      throw new Error('No time window specified in rate rule');
+    }
 
     // Build rate key: user:endpoint
     const rateKey = `${context.user}:${context.endpoint}`;
 
-    // Check with store
-    const result = await this.store.checkRate(rateKey, limit, windowSeconds);
+    // Check with store (pass burst if defined)
+    const result = await this.store.checkRate(rateKey, limit, windowSeconds, burst);
 
     if (result.allowed) {
       return {
@@ -155,6 +210,7 @@ export class PolicyEngine {
           limit: result.limit,
           remaining: result.remaining,
           resetInSeconds: result.resetInSeconds,
+          burstTokens: result.burstTokens,
         },
       };
     }
@@ -166,7 +222,7 @@ export class PolicyEngine {
       plan: context.plan,
       endpoint: context.endpoint,
       type: 'rate_exceeded',
-      window: maxPerSecond ? '1s' : '1m',
+      window: windowLabel,
       value: result.current,
       threshold: limit,
     });
@@ -183,6 +239,7 @@ export class PolicyEngine {
           limit: result.limit,
           remaining: 0,
           resetInSeconds: result.resetInSeconds,
+          burstTokens: result.burstTokens,
         },
       };
     }
@@ -206,6 +263,7 @@ export class PolicyEngine {
           limit: result.limit,
           remaining: 0,
           resetInSeconds: result.resetInSeconds,
+          burstTokens: result.burstTokens,
         },
       };
     }
@@ -219,6 +277,7 @@ export class PolicyEngine {
           limit: result.limit,
           remaining: 0,
           resetInSeconds: result.resetInSeconds,
+          burstTokens: result.burstTokens,
         },
       };
     }
@@ -232,6 +291,7 @@ export class PolicyEngine {
         limit: result.limit,
         remaining: 0,
         resetInSeconds: result.resetInSeconds,
+        burstTokens: result.burstTokens,
       },
     };
   }

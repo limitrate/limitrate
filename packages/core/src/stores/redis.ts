@@ -6,6 +6,24 @@
 import Redis from 'ioredis';
 import type { Store, RateCheckResult, CostCheckResult } from '../types';
 
+// Lua script for peeking at rate without incrementing (v1.7.0 - B5)
+const RATE_PEEK_SCRIPT = `
+local key = KEYS[1]
+local limit = tonumber(ARGV[1])
+local window = tonumber(ARGV[2])
+
+local current = redis.call('GET', key)
+
+if not current then
+  return {0, limit, window, limit}
+end
+
+current = tonumber(current)
+local ttl = redis.call('TTL', key)
+local remaining = math.max(0, limit - current)
+return {current, remaining, ttl, limit}
+`;
+
 // Lua script for atomic rate check and increment
 const RATE_CHECK_SCRIPT = `
 local key = KEYS[1]
@@ -30,6 +48,48 @@ end
 redis.call('INCR', key)
 local ttl = redis.call('TTL', key)
 return {current + 1, limit - current - 1, ttl, limit}
+`;
+
+// Lua script for atomic rate check with burst support
+const RATE_CHECK_BURST_SCRIPT = `
+local rateKey = KEYS[1]
+local burstKey = KEYS[2]
+local limit = tonumber(ARGV[1])
+local window = tonumber(ARGV[2])
+local now = tonumber(ARGV[3])
+local burst = tonumber(ARGV[4])
+
+local current = redis.call('GET', rateKey)
+
+-- No entry: create new with initial burst tokens
+if not current then
+  redis.call('SETEX', rateKey, window, 1)
+  redis.call('SETEX', burstKey, window, burst)
+  return {1, limit - 1, window, limit, burst}
+end
+
+current = tonumber(current)
+
+-- Within limit: increment and return
+if current < limit then
+  redis.call('INCR', rateKey)
+  local ttl = redis.call('TTL', rateKey)
+  local burstTokens = tonumber(redis.call('GET', burstKey) or 0)
+  return {current + 1, limit - current - 1, ttl, limit, burstTokens}
+end
+
+-- Limit reached: try burst
+local burstTokens = tonumber(redis.call('GET', burstKey) or 0)
+if burstTokens > 0 then
+  redis.call('DECR', burstKey)
+  redis.call('INCR', rateKey)
+  local ttl = redis.call('TTL', rateKey)
+  return {current + 1, 0, ttl, limit, burstTokens - 1}
+end
+
+-- Both exhausted
+local ttl = redis.call('TTL', rateKey)
+return {current, 0, ttl, limit, 0}
 `;
 
 // Lua script for atomic cost increment and check
@@ -93,11 +153,40 @@ export class RedisStore implements Store {
     }
   }
 
-  async checkRate(key: string, limit: number, windowSeconds: number): Promise<RateCheckResult> {
-    const prefixedKey = `${this.keyPrefix}rate:${key}`;
+  async checkRate(key: string, limit: number, windowSeconds: number, burst?: number): Promise<RateCheckResult> {
     const now = Math.floor(Date.now() / 1000);
 
     try {
+      // Use burst script if burst is defined
+      if (burst !== undefined) {
+        const rateKey = `${this.keyPrefix}rate:${key}`;
+        const burstKey = `${this.keyPrefix}burst:${key}`;
+
+        const result = await this.client.eval(
+          RATE_CHECK_BURST_SCRIPT,
+          2,
+          rateKey,
+          burstKey,
+          limit.toString(),
+          windowSeconds.toString(),
+          now.toString(),
+          burst.toString()
+        );
+
+        const [current, remaining, resetInSeconds, returnedLimit, burstTokens] = result as number[];
+
+        return {
+          allowed: current <= limit + burst,
+          current,
+          remaining: Math.max(0, remaining),
+          resetInSeconds: Math.max(1, resetInSeconds),
+          limit: returnedLimit,
+          burstTokens,
+        };
+      }
+
+      // No burst: use simple script
+      const prefixedKey = `${this.keyPrefix}rate:${key}`;
       const result = await this.client.eval(
         RATE_CHECK_SCRIPT,
         1,
@@ -119,6 +208,33 @@ export class RedisStore implements Store {
     } catch (error) {
       // Log error and rethrow
       console.error('[LimitRate] Redis rate check error:', error);
+      throw error;
+    }
+  }
+
+  async peekRate(key: string, limit: number, windowSeconds: number): Promise<RateCheckResult> {
+    const prefixedKey = `${this.keyPrefix}rate:${key}`;
+
+    try {
+      const result = await this.client.eval(
+        RATE_PEEK_SCRIPT,
+        1,
+        prefixedKey,
+        limit.toString(),
+        windowSeconds.toString()
+      );
+
+      const [current, remaining, resetInSeconds, returnedLimit] = result as number[];
+
+      return {
+        allowed: current < limit,
+        current,
+        remaining: Math.max(0, remaining),
+        resetInSeconds: Math.max(1, resetInSeconds),
+        limit: returnedLimit,
+      };
+    } catch (error) {
+      console.error('[LimitRate] Redis peek rate error:', error);
       throw error;
     }
   }

@@ -8,6 +8,7 @@ import type { Store, RateCheckResult, CostCheckResult } from '../types';
 interface CacheEntry {
   count: number;
   expiresAt: number;
+  burstTokens?: number;
 }
 
 export class MemoryStore implements Store {
@@ -25,14 +26,15 @@ export class MemoryStore implements Store {
     this.cleanupInterval = setInterval(() => this.cleanup(), intervalMs);
   }
 
-  async checkRate(key: string, limit: number, windowSeconds: number): Promise<RateCheckResult> {
+  async checkRate(key: string, limit: number, windowSeconds: number, burst?: number): Promise<RateCheckResult> {
     const now = Date.now();
     const entry = this.cache.get(key);
 
     // No entry or expired → allow and create new
     if (!entry || entry.expiresAt <= now) {
       const expiresAt = now + windowSeconds * 1000;
-      this.cache.set(key, { count: 1, expiresAt });
+      const burstTokens = burst; // Initialize with full burst allowance
+      this.cache.set(key, { count: 1, expiresAt, burstTokens });
       this.evictIfNeeded();
 
       return {
@@ -41,34 +43,81 @@ export class MemoryStore implements Store {
         remaining: limit - 1,
         resetInSeconds: windowSeconds,
         limit,
+        burstTokens,
       };
     }
 
     // Entry exists and not expired
     const current = entry.count;
+    const resetInSeconds = Math.ceil((entry.expiresAt - now) / 1000);
 
-    if (current >= limit) {
-      // Limit exceeded
-      const resetInSeconds = Math.ceil((entry.expiresAt - now) / 1000);
+    // Try to use regular token first
+    if (current < limit) {
+      // Within limit - increment count
+      entry.count += 1;
       return {
-        allowed: false,
-        current,
+        allowed: true,
+        current: entry.count,
+        remaining: limit - entry.count,
+        resetInSeconds,
+        limit,
+        burstTokens: entry.burstTokens,
+      };
+    }
+
+    // Limit reached - try to use burst token
+    if (burst !== undefined && entry.burstTokens !== undefined && entry.burstTokens > 0) {
+      // Use burst token
+      entry.burstTokens -= 1;
+      entry.count += 1;
+      return {
+        allowed: true,
+        current: entry.count,
         remaining: 0,
         resetInSeconds,
+        limit,
+        burstTokens: entry.burstTokens,
+      };
+    }
+
+    // Both regular and burst tokens exhausted
+    return {
+      allowed: false,
+      current,
+      remaining: 0,
+      resetInSeconds,
+      limit,
+      burstTokens: entry.burstTokens ?? 0,
+    };
+  }
+
+  async peekRate(key: string, limit: number, windowSeconds: number): Promise<RateCheckResult> {
+    const now = Date.now();
+    const entry = this.cache.get(key);
+
+    // No entry or expired → would be allowed
+    if (!entry || entry.expiresAt <= now) {
+      return {
+        allowed: true,
+        current: 0,
+        remaining: limit,
+        resetInSeconds: windowSeconds,
         limit,
       };
     }
 
-    // Increment count
-    entry.count += 1;
+    // Entry exists and not expired
+    const current = entry.count;
     const resetInSeconds = Math.ceil((entry.expiresAt - now) / 1000);
+    const remaining = Math.max(0, limit - current);
 
     return {
-      allowed: true,
-      current: entry.count,
-      remaining: limit - entry.count,
+      allowed: current < limit,
+      current,
+      remaining,
       resetInSeconds,
       limit,
+      burstTokens: entry.burstTokens,
     };
   }
 

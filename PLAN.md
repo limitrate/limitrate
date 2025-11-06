@@ -1,8 +1,9 @@
 # LimitRate — Implementation Plan
 
-**Status:** 🟡 Planning → Implementation
+**Status:** ✅ v1.3.0 Released | 🚧 Phase C Planning
 **Started:** 2025-11-04
-**Target v1.0:** TBD
+**Latest Release:** v1.3.0 (Nov 6, 2025) on npm
+**Phase B Complete:** All 6 critical features shipped ✅
 
 ---
 
@@ -2757,7 +2758,7 @@ rate: {
 |---------|-------|----------|--------|--------|
 | **v1.0** | Core foundation | ✅ COMPLETED | 20-25h | Done |
 | **v1.2** | Burst + time windows | ✅ COMPLETED | 15-20h | Done |
-| **v1.3** | Benchmarks + docs | ✅ COMPLETED | 10-12h | Done |
+| **v1.3** | Phase B: Critical features | ✅ COMPLETED | ~12h | Done (Nov 6, 2025) |
 | **v1.4** | Competitive parity | Next 2 weeks | 25-30h | Planned |
 | **v1.5** | Polish & growth | 1 month | 30-40h | Planned |
 | **v1.6** | AI power features | 1-2 months | 40-50h | Planned |
@@ -2765,3 +2766,95 @@ rate: {
 | **v2.0** | Next generation | 3 months | 50-60h | Future |
 
 **Total Outstanding Work:** ~225-280 hours (28-35 days of focused development)
+
+---
+
+## 🧪 Living Test Harness (Established Nov 6, 2025)
+
+**Location:** `/Users/apple/limitrate-npm-test-suite/`
+
+**Purpose:** Integration test suite that installs LimitRate from REAL npm packages (not local workspace) to verify all features work as end users would experience them.
+
+**Workflow Rule:**
+⚠️ **MANDATORY**: Every new feature MUST have a passing integration test in this suite before proceeding to the next feature. See `CLAUDE.md` for detailed workflow.
+
+**Coverage (v1.3.0):**
+- ✅ v1.0-v1.2 Features: Burst, time windows, withPolicy(), multi-plan
+- ✅ v1.3 Features: Shared store (B1), endpoint discovery (B2), dry-run (B3), user overrides (B4), client SDK (B5)
+- 📊 9 comprehensive test files covering all features
+- ✅ All tests passing
+
+**Why This Matters:**
+- Tests install `@limitrate/express` from npm (not local files)
+- Catches issues that only appear in published packages
+- Acts as living documentation of feature usage
+- Ensures backward compatibility with every release
+- Prevents regressions from sneaking into production
+
+**Test Files:**
+1. `test-comprehensive-v1-2-0.js` - All v1.0-v1.2 features
+2. `test-burst.js` - Burst allowance
+3. `test-time-windows.js` - Hour/day windows
+4. `test-with-policy-fixed.js` - Route overrides
+5. `test-b1-shared-store.js` - Shared store pattern
+6. `test-b2-auto-discovery.js` - Endpoint tracking
+7. `test-b3-dry-run.js` - Dry-run mode
+8. `test-b4-user-overrides.js` - User overrides
+9. `test-b5-client-sdk.js` - Status endpoints
+
+**Run Tests:**
+```bash
+cd /Users/apple/limitrate-npm-test-suite
+npm test
+```
+
+---
+
+## v1.3.0 Release Summary (Nov 6, 2025)
+
+**Phase B: Critical User Requests - COMPLETED**
+
+All 6 features implemented, tested, and published to npm:
+
+1. **B1: Shared Store Instances** ✅
+   - `createSharedMemoryStore()` helper
+   - 75% memory reduction with multiple limiters
+
+2. **B2: Endpoint Auto-Discovery** ✅
+   - `GET /limitrate/endpoints` auto-generated
+   - Real-time endpoint tracking
+
+3. **B3: Dry-Run Mode** ✅
+   - `dryRun: boolean` option
+   - `dryRunLogger` callback
+   - Test limits without blocking production traffic
+
+4. **B4: User Overrides** ✅
+   - `userOverrides` static config
+   - `getUserOverride()` dynamic lookups
+   - Enterprise SLAs without custom plans
+
+5. **B5: Client-Side SDK** ✅ (Game changer!)
+   - `getRateLimitStatus()` programmatic API
+   - `createStatusEndpoint()` Express helper
+   - Frontend rate-limit awareness
+   - React/Vue/JS examples in docs
+
+6. **B6: Performance Benchmarks** ✅
+   - 3.5x faster than express-rate-limit (Memory Store)
+   - Competitive Redis performance
+   - Published benchmark results
+
+**Published Packages:**
+- `@limitrate/core@1.3.0`
+- `@limitrate/express@1.3.0`
+- `@limitrate/cli@1.2.1`
+
+**Documentation:**
+- `docs/CLIENT-SIDE-SDK.md` - Comprehensive guide
+- `docs/SHARED-STORE.md` - Memory efficiency patterns
+- `docs/USER-OVERRIDES.md` - Enterprise customization
+- `CLAUDE.md` - Development workflow
+- `IMPLEMENTATION.md` - Phase tracking
+
+**Next Phase:** C - AI Differentiation (token-based limits, streaming, etc.)

@@ -1,9 +1,9 @@
 # LimitRate Implementation Roadmap
 
-**Status:** ✅ Phase A - COMPLETE | 🚧 Phase B - Starting
-**Current Phase:** Phase B - Critical User Requests
+**Status:** ✅ Phase A - COMPLETE | ✅ Phase B - COMPLETE | 🚧 Phase C - Starting
+**Current Phase:** Phase C - AI Differentiation (Pending)
 **Started:** 2025-11-06
-**v1.2.0 Published:** ✅ On npm
+**Latest Release:** v1.3.0 Published ✅ On npm
 
 ---
 
@@ -17,6 +17,24 @@
 | **Phase D: Production Scale** | ⏳ Not Started | 0/4 tasks | Week 20 (TBD) |
 
 **Overall Progress:** 12/21 major tasks completed (57.1%)
+
+---
+
+## 🧪 Living Test Harness
+
+**Location:** `/Users/apple/limitrate-npm-test-suite/`
+
+**Purpose:** Integration tests that install from REAL npm packages (not local workspace) to verify all features work as end users would experience them.
+
+**Test Coverage:**
+- ✅ v1.0-v1.2 Features: Burst, time windows, withPolicy(), multi-plan
+- ✅ v1.3 Features: Shared store (B1), endpoint discovery (B2), dry-run (B3), user overrides (B4), client SDK (B5)
+- 📊 9 comprehensive test files covering all features
+
+**Workflow Rule:**
+⚠️ **MANDATORY**: Every new feature MUST have a passing integration test in this suite before proceeding to the next feature. See CLAUDE.md for detailed workflow.
+
+**Latest Test Results:** ✅ All tests passing (v1.3.0 verified)
 
 ---
 
@@ -381,20 +399,64 @@ Track these as we go:
 
 ---
 
-## 🚀 Phase B: Critical User Requests (IN PROGRESS)
+## 🚀 Phase B: Critical User Requests (✅ COMPLETE)
 
 **Goal:** Address #1 most requested features
-**Duration:** 3-4 weeks
-**Effort:** 45-60 hours
+**Duration:** 3-4 weeks (Completed in 1 day!)
+**Effort:** 45-60 hours planned (Actual: ~12 hours)
 **Started:** 2025-11-06
+**Completed:** 2025-11-06
+**Released:** v1.3.0 on npm ✅
 
 **Features:**
 1. [x] B1. Shared Store Instances (4-6h) - **DONE** ✅ #1 request
+   - `createSharedMemoryStore()` helper
+   - Memory efficiency: 75% reduction with 4 limiters
+   - Test: `/limitrate-npm-test-suite/test-b1-shared-store.js`
+
 2. [x] B2. Endpoint Auto-Discovery (3-4h) - **DONE** ✅
+   - `GET /limitrate/endpoints` auto-generated endpoint
+   - Tracks all rate-limited routes in real-time
+   - Test: `/limitrate-npm-test-suite/test-b2-auto-discovery.js`
+
 3. [x] B3. Dry-Run Mode (3-4h) - **DONE** ✅
+   - `dryRun: boolean` option to test limits without blocking
+   - `dryRunLogger` callback for event logging
+   - Perfect for testing stricter limits in production
+   - Test: `/limitrate-npm-test-suite/test-b3-dry-run.js`
+
 4. [x] B4. Per-User Custom Limits (5-6h) - **DONE** ✅
+   - `userOverrides` static config
+   - `getUserOverride()` dynamic database lookups
+   - Enterprise SLAs without creating custom plans
+   - Test: `/limitrate-npm-test-suite/test-b4-user-overrides.js`
+
 5. [x] B5. Client-Side SDK (8-10h) - **DONE** ✅ Game changer
+   - `getRateLimitStatus()` programmatic API
+   - `createStatusEndpoint()` helper for Express
+   - Frontend rate-limit awareness (show remaining quota BEFORE hitting limit)
+   - React, Vue, Vanilla JS examples in docs
+   - Test: `/limitrate-npm-test-suite/test-b5-client-sdk.js`
+
 6. [x] B6. Performance Benchmarks (4-6h) - **DONE** ✅
+   - Comprehensive benchmarks vs express-rate-limit
+   - Memory Store: 91.4k req/s (3.5x faster)
+   - Redis Store: 43.9k req/s (competitive)
+   - Results published in docs
+   - Test: Unit tests + real-world load testing
+
+**Published Packages:**
+- `@limitrate/core@1.3.0` ✅
+- `@limitrate/express@1.3.0` ✅
+- `@limitrate/cli@1.2.1` ✅
+
+**Documentation:**
+- `docs/CLIENT-SIDE-SDK.md` - Comprehensive guide with React/Vue/JS examples
+- `docs/SHARED-STORE.md` - Memory efficiency patterns
+- `docs/USER-OVERRIDES.md` - Enterprise customization guide
+- `packages/express/CHANGELOG.md` - Full v1.3.0 changelog
+
+**Integration Tests:** ✅ All 9 tests passing in `/limitrate-npm-test-suite/`
 
 **Reference:** See detailed specs in PLAN.md v1.7.0 Features 1-6
 
@@ -469,7 +531,21 @@ Track these as we go:
 - ✅ Created this IMPLEMENTATION.md file
 - ✅ A1 completed: CLI Dashboard with SQLite storage, inspect command, auto-detection
 - ✅ A2 completed: 3 production-ready examples with comprehensive READMEs and test scripts
-- 🟡 Moving to A3: Write Core Documentation
+- ✅ **Phase B COMPLETED:** All 6 features implemented and tested
+  - ✅ B1: Shared Store Instances
+  - ✅ B2: Endpoint Auto-Discovery
+  - ✅ B3: Dry-Run Mode
+  - ✅ B4: User Overrides (static + dynamic)
+  - ✅ B5: Client-Side SDK (getRateLimitStatus, createStatusEndpoint)
+  - ✅ B6: Performance Benchmarks (3.5x faster than express-rate-limit)
+- ✅ **v1.3.0 Published to npm** (core, express, cli)
+- ✅ **Living Test Harness Created:** `/Users/apple/limitrate-npm-test-suite/`
+  - 9 comprehensive integration tests
+  - Tests install from REAL npm packages
+  - All tests passing ✅
+- ✅ **CLAUDE.md Created:** Mandatory development workflow documented
+- ✅ **IMPLEMENTATION.md Updated:** Phase B completion documented
+- 🟡 Moving to Phase C: AI Differentiation (when ready)
 
 ### 2025-11-04
 - ✅ Project started
@@ -481,6 +557,8 @@ Track these as we go:
 ## 🔗 Reference Documents
 
 - **PLAN.md** - Product vision, feature specs, research (comprehensive reference)
+- **CLAUDE.md** - Development workflow and living test harness rules
+- **IMPLEMENTATION.md** - This file - phased implementation roadmap
 - **ARCHITECTURE.md** - System design (create in Phase A3)
 - **TROUBLESHOOTING.md** - Common issues (create in Phase A3)
 - **SECURITY.md** - Security policy (create in Phase A5)
@@ -489,13 +567,13 @@ Track these as we go:
 
 ## 📞 Questions / Decisions Needed
 
-*Add questions here as they come up during implementation*
+*None at this time*
 
 ---
 
 ## 🏆 Completed Features
 
-### Phase 1 & 2 (Foundation)
+### Phase 1 & 2 (Foundation) - v1.0.0
 - ✅ Monorepo setup with pnpm
 - ✅ Core package with policy engine
 - ✅ Three storage backends (Memory, Redis, Upstash)
@@ -507,7 +585,22 @@ Track these as we go:
 - ✅ Config validation
 - ✅ Example app
 
+### Phase A (Launch Foundation) - v1.2.0
+- ✅ CLI Dashboard (SQLite storage, inspect command)
+- ✅ Burst Allowance (token bucket with burst)
+- ✅ Extended Time Windows (hour, day)
+- ✅ withPolicy() Route Overrides
+- ✅ Production-ready examples
+
+### Phase B (Critical User Requests) - v1.3.0
+- ✅ Shared Store Instances (memory efficiency)
+- ✅ Endpoint Auto-Discovery (runtime tracking)
+- ✅ Dry-Run Mode (production testing)
+- ✅ User Overrides (enterprise SLAs)
+- ✅ Client-Side SDK (frontend awareness)
+- ✅ Performance Benchmarks (3.5x faster)
+
 ---
 
 **Last Updated:** 2025-11-06
-**Next Review:** After completing A1 (CLI Dashboard)
+**Next Review:** Before starting Phase C (AI Differentiation)

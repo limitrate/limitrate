@@ -1,5 +1,12 @@
 # @limitrate/cli
 
+## 1.2.2
+
+### Patch Changes
+
+- Updated dependencies [d51e1fc]
+  - @limitrate/core@1.3.1
+
 ## 1.2.1
 
 ### Patch Changes

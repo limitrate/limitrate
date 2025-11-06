@@ -114,8 +114,8 @@ importers:
         specifier: workspace:*
         version: link:../core
       better-sqlite3:
-        specifier: ^9.4.0
-        version: 9.6.0
+        specifier: ^12.4.1
+        version: 12.4.1
       cli-table3:
         specifier: ^0.6.3
         version: 0.6.5
@@ -1875,8 +1875,9 @@ packages:
       is-windows: 1.0.2
     dev: true
 
-  /better-sqlite3@9.6.0:
-    resolution: {integrity: sha512-yR5HATnqeYNVnkaUTf4bOP2dJSnyhP4puJN/QPRyx4YkBEEUxib422n2XzPqDEHjQQqazoYoADdAm5vE15+dAQ==}
+  /better-sqlite3@12.4.1:
+    resolution: {integrity: sha512-3yVdyZhklTiNrtg+4WqHpJpFDd+WHTg2oM7UcR80GqL05AOV0xEJzc6qNvFYoEtE+hRp1n9MpN6/+4yhlGkDXQ==}
+    engines: {node: 20.x || 22.x || 23.x || 24.x}
     requiresBuild: true
     dependencies:
       bindings: 1.5.0

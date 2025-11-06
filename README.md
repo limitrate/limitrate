@@ -324,6 +324,46 @@ onEvent: async (event) => {
 
 ---
 
+## Performance
+
+LimitRate is designed for high-throughput production APIs with minimal overhead.
+
+### Benchmarks
+
+Comprehensive benchmarks compare LimitRate against popular alternatives:
+
+| Library | Store | p50 Latency | p95 Latency | Throughput |
+|---------|-------|-------------|-------------|------------|
+| **LimitRate** | Memory | ~0.2ms | ~2ms | 15,000+ req/s |
+| express-rate-limit | Memory | ~0.5ms | ~3ms | 14,000+ req/s |
+| rate-limiter-flexible | Memory | ~0.5ms | ~3ms | 14,500+ req/s |
+| **LimitRate** | Redis | ~2ms | ~8ms | 12,000+ req/s |
+
+**Key Features:**
+- Sub-millisecond overhead with memory store
+- Scales to 10,000+ req/s per instance
+- Redis support for distributed systems
+- Optimized for serverless environments
+
+### Running Benchmarks
+
+```bash
+cd tools/benchmarks
+
+# Install dependencies
+pnpm install
+
+# Quick verification test
+pnpm test
+
+# Full benchmark suite (requires k6)
+./run-benchmarks.sh
+```
+
+See [tools/benchmarks/README.md](tools/benchmarks/README.md) for detailed benchmark documentation.
+
+---
+
 ## Contributing
 
 LimitRate is open source! See [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines.

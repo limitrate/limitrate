@@ -3,7 +3,7 @@
  */
 
 import type { Request, Response, NextFunction, RequestHandler } from 'express';
-import type { PolicyConfig, PlanName, StoreConfig } from '@limitrate/core';
+import type { PolicyConfig, PlanName, StoreConfig, Store, UserOverride, UserOverridesConfig } from '@limitrate/core';
 
 export interface LimitRateOptions {
   /**
@@ -19,9 +19,21 @@ export interface LimitRateOptions {
   identifyPlan: (req: Request) => PlanName;
 
   /**
-   * Store configuration
+   * Store configuration or pre-configured store instance (for sharing)
+   *
+   * **Option 1: Config (auto-creates store)**
+   * ```typescript
+   * store: { type: 'redis', url: process.env.REDIS_URL }
+   * ```
+   *
+   * **Option 2: Shared store instance (recommended for multiple limiters)**
+   * ```typescript
+   * import { createSharedRedisStore } from '@limitrate/express';
+   * const store = createSharedRedisStore({ url: process.env.REDIS_URL });
+   * // Reuse this store in multiple limitrate() calls
+   * ```
    */
-  store: StoreConfig;
+  store: StoreConfig | Store;
 
   /**
    * Policy configuration (plan -> endpoints -> rules)
@@ -70,6 +82,67 @@ export interface LimitRateOptions {
    * Skip rate limiting for certain paths (health checks, etc.)
    */
   skip?: (req: Request) => boolean;
+
+  /**
+   * Track endpoints for auto-discovery (v1.4.0 - B2)
+   * Set to false to disable tracking
+   * @default true
+   */
+  trackEndpoints?: boolean;
+
+  /**
+   * Dry-run mode (v1.5.0 - B3)
+   * If true, logs would-be 429s but doesn't actually block requests
+   * Perfect for testing new rate limits in production without risk
+   * @default false
+   */
+  dryRun?: boolean;
+
+  /**
+   * Custom logger for dry-run mode (v1.5.0 - B3)
+   * Called when a request would have been blocked in dry-run mode
+   * @example (event) => console.log('Would block:', event.user, event.endpoint)
+   */
+  dryRunLogger?: (event: DryRunEvent) => void | Promise<void>;
+
+  /**
+   * Static user overrides (v1.6.0 - B4)
+   * Map of userId to custom rate limits
+   * @example { 'user_enterprise_acme': { maxPerMinute: 10000, reason: 'Enterprise SLA' } }
+   */
+  userOverrides?: UserOverridesConfig;
+
+  /**
+   * Dynamic user override resolver (v1.6.0 - B4)
+   * Called for each request to get user-specific overrides
+   * Useful for loading overrides from database
+   * @example async (userId) => db.userLimits.findOne({ userId })
+   */
+  getUserOverride?: (userId: string, req: Request) => Promise<UserOverride | null> | UserOverride | null;
+}
+
+/**
+ * Dry-run event data (v1.5.0 - B3)
+ */
+export interface DryRunEvent {
+  /** Timestamp of the event */
+  timestamp: Date;
+  /** User ID */
+  user: string;
+  /** Plan name */
+  plan: string;
+  /** Endpoint */
+  endpoint: string;
+  /** What action would have been taken */
+  action: 'block' | 'slowdown';
+  /** Reason for the action */
+  reason: 'rate_exceeded' | 'cost_exceeded';
+  /** Current usage */
+  current: number;
+  /** Limit that was exceeded */
+  limit: number;
+  /** How many seconds until reset */
+  retryAfter: number;
 }
 
 export interface BlockedResponse {

@@ -11,11 +11,26 @@ import {
   createEndpointKey,
   extractIP,
   isIPInList,
+  getGlobalEndpointTracker,
 } from '@limitrate/core';
+import type { Store } from '@limitrate/core';
 import type { Request, Response, NextFunction, RequestHandler } from 'express';
 import type { LimitRateOptions } from './types';
 import { send429Response, send403Response, setRateLimitHeaders } from './response';
 import { sendToWebhook } from './webhook';
+
+/**
+ * Type guard to check if store is a Store instance
+ */
+function isStoreInstance(store: any): store is Store {
+  return (
+    store &&
+    typeof store === 'object' &&
+    typeof store.checkRate === 'function' &&
+    typeof store.incrementCost === 'function' &&
+    typeof store.ping === 'function'
+  );
+}
 
 /**
  * Auto-detect and initialize CLI storage if installed
@@ -41,7 +56,6 @@ async function initCliStorage(): Promise<((event: any) => void) | null> {
  */
 export function limitrate(options: LimitRateOptions): RequestHandler {
   // Validate configuration at startup (fail-fast)
-  validateStoreConfig(options.store);
   validatePolicyConfig(options.policies);
 
   if (options.ipAllowlist) {
@@ -52,8 +66,15 @@ export function limitrate(options: LimitRateOptions): RequestHandler {
     validateIPList(options.ipBlocklist, 'ipBlocklist');
   }
 
-  // Create store and policy engine
-  const store = createStore(options.store);
+  // Handle store: either a Store instance (shared) or StoreConfig (auto-create)
+  const store: Store = isStoreInstance(options.store)
+    ? options.store
+    : (() => {
+        // Validate and create store from config
+        validateStoreConfig(options.store);
+        return createStore(options.store);
+      })();
+
   const engine = new PolicyEngine(store, options.policies);
 
   // Auto-detect CLI and register event handler (async)
@@ -79,14 +100,19 @@ export function limitrate(options: LimitRateOptions): RequestHandler {
     engine.onEvent(options.onEvent);
   }
 
-  // Warn if using memory store in production
-  if (options.store.type === 'memory' && process.env.NODE_ENV === 'production') {
+  // Warn if using memory store in production (only if config was provided, not instance)
+  if (!isStoreInstance(options.store) && options.store.type === 'memory' && process.env.NODE_ENV === 'production') {
     console.warn(`
 ⚠️  [LimitRate] Memory store detected in production.
 Limits won't be shared across instances.
 Use Redis for distributed rate limiting:
 
   store: { type: 'redis', url: process.env.REDIS_URL }
+
+Or use shared store factory:
+
+  import { createSharedRedisStore } from '@limitrate/express';
+  const store = createSharedRedisStore({ url: process.env.REDIS_URL });
     `);
   }
 
@@ -130,13 +156,45 @@ Use Redis for distributed rate limiting:
       // Normalize endpoint
       const endpoint = createEndpointKey(req.method, req.path, req.route?.path);
 
+      // Check for route-specific policy override
+      const policyOverride = (req as any).__limitrate_policy;
+
+      // Check for user override (v1.6.0 - B4)
+      let userOverride = null;
+      try {
+        // Try static overrides first
+        if (options.userOverrides && options.userOverrides[user]) {
+          userOverride = options.userOverrides[user];
+        }
+        // Try dynamic override resolver (takes precedence over static)
+        else if (options.getUserOverride) {
+          userOverride = await Promise.resolve(options.getUserOverride(user, req));
+        }
+      } catch (error) {
+        console.warn('[LimitRate] getUserOverride failed:', error);
+        // Continue without override
+      }
+
       // Check policy
       const result = await engine.check({
         user,
         plan,
         endpoint,
         costContext: req, // Pass request as cost context
+        policyOverride, // Pass route-specific override if exists
+        userOverride, // Pass user override if exists
       });
+
+      // Track endpoint for auto-discovery (v1.4.0 - B2)
+      if (options.trackEndpoints !== false) {
+        const tracker = getGlobalEndpointTracker();
+        tracker.trackRequest(req.method, req.path, {
+          hasRateLimit: true, // This endpoint IS protected by limitrate
+          wasRateLimited: result.action === 'block' && !result.allowed,
+          policy: plan,
+          limit: result.details?.limit,
+        });
+      }
 
       // Set rate limit headers (even if allowed)
       if (result.details) {
@@ -144,18 +202,77 @@ Use Redis for distributed rate limiting:
           res,
           result.details.limit,
           result.details.remaining,
-          result.details.resetInSeconds
+          result.details.resetInSeconds,
+          result.details.burstTokens
         );
       }
 
       // Handle slowdown
       if (result.action === 'slowdown' && result.slowdownMs) {
+        // Dry-run mode: Log instead of slowing down
+        if (options.dryRun) {
+          const dryRunEvent = {
+            timestamp: new Date(),
+            user,
+            plan,
+            endpoint,
+            action: 'slowdown' as const,
+            reason: (result.reason || 'rate_exceeded') as 'rate_exceeded' | 'cost_exceeded',
+            current: result.details?.used || 0,
+            limit: result.details?.limit || 0,
+            retryAfter: result.retryAfterSeconds || result.details?.resetInSeconds || 0,
+          };
+
+          // Log to console (default behavior)
+          console.log(`[LimitRate] DRY-RUN: Would slowdown ${user} on ${endpoint} (${dryRunEvent.current}/${dryRunEvent.limit})`);
+
+          // Call custom logger if provided (catch errors to prevent disruption)
+          if (options.dryRunLogger) {
+            try {
+              await Promise.resolve(options.dryRunLogger(dryRunEvent));
+            } catch (loggerError) {
+              console.error('[LimitRate] Unexpected error:', loggerError);
+            }
+          }
+
+          return next(); // Allow request to continue
+        }
+
         await sleep(result.slowdownMs);
         return next();
       }
 
       // Handle block
       if (result.action === 'block' && !result.allowed) {
+        // Dry-run mode: Log instead of blocking
+        if (options.dryRun) {
+          const dryRunEvent = {
+            timestamp: new Date(),
+            user,
+            plan,
+            endpoint,
+            action: 'block' as const,
+            reason: (result.reason === 'rate_exceeded' ? 'rate_exceeded' : 'cost_exceeded') as 'rate_exceeded' | 'cost_exceeded',
+            current: result.details?.used || 0,
+            limit: result.details?.limit || 0,
+            retryAfter: result.retryAfterSeconds || result.details?.resetInSeconds || 0,
+          };
+
+          // Log to console (default behavior)
+          console.log(`[LimitRate] DRY-RUN: Would block ${user} on ${endpoint} (${dryRunEvent.current}/${dryRunEvent.limit})`);
+
+          // Call custom logger if provided (catch errors to prevent disruption)
+          if (options.dryRunLogger) {
+            try {
+              await Promise.resolve(options.dryRunLogger(dryRunEvent));
+            } catch (loggerError) {
+              console.error('[LimitRate] Unexpected error:', loggerError);
+            }
+          }
+
+          return next(); // Allow request to continue
+        }
+
         const upgradeHint =
           typeof options.upgradeHint === 'function'
             ? options.upgradeHint(plan)

@@ -1,0 +1,15 @@
+{
+  "name": "express-shared-store-example",
+  "version": "1.0.1",
+  "private": true,
+  "type": "module",
+  "description": "LimitRate example demonstrating shared store instances for multiple limiters",
+  "scripts": {
+    "dev": "node index.js"
+  },
+  "dependencies": {
+    "@limitrate/express": "workspace:*",
+    "@limitrate/core": "workspace:*",
+    "express": "^4.21.2"
+  }
+}

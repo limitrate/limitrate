@@ -7,10 +7,14 @@ export type PlanName = 'free' | 'pro' | 'enterprise' | string;
 export type EnforcementAction = 'allow' | 'block' | 'slowdown' | 'allow-and-log';
 
 export interface RateRule {
-  /** Maximum requests per minute */
-  maxPerMinute?: number;
   /** Maximum requests per second */
   maxPerSecond?: number;
+  /** Maximum requests per minute */
+  maxPerMinute?: number;
+  /** Maximum requests per hour */
+  maxPerHour?: number;
+  /** Maximum requests per day */
+  maxPerDay?: number;
   /** Burst allowance (extra tokens beyond steady rate) */
   burst?: number;
   /** Action to take when limit exceeded */
@@ -47,6 +51,30 @@ export type PolicyConfig = Record<
   }
 >;
 
+/**
+ * User override configuration (v1.6.0 - B4)
+ * Allows specific users to have custom rate limits regardless of their plan
+ */
+export interface UserOverride {
+  /** Maximum requests per second (overrides plan limit) */
+  maxPerSecond?: number;
+  /** Maximum requests per minute (overrides plan limit) */
+  maxPerMinute?: number;
+  /** Maximum requests per hour (overrides plan limit) */
+  maxPerHour?: number;
+  /** Maximum requests per day (overrides plan limit) */
+  maxPerDay?: number;
+  /** Reason for override (audit trail) */
+  reason?: string;
+  /** Endpoint-specific overrides (optional) */
+  endpoints?: Record<string, Omit<UserOverride, 'reason' | 'endpoints'>>;
+}
+
+/**
+ * Static user overrides configuration
+ */
+export type UserOverridesConfig = Record<string, UserOverride>;
+
 export interface StoreConfig {
   /** Store type */
   type: 'memory' | 'redis' | 'upstash';
@@ -69,6 +97,8 @@ export interface RateCheckResult {
   resetInSeconds: number;
   /** Limit that was checked against */
   limit: number;
+  /** Current burst tokens available (if burst enabled) */
+  burstTokens?: number;
 }
 
 export interface CostCheckResult {
@@ -105,13 +135,24 @@ export interface LimitRateEvent {
 
 export interface Store {
   /**
-   * Check rate limit for a key
+   * Check rate limit for a key (increments counter)
    * @param key - Unique identifier (e.g., "user_123:POST|/api")
    * @param limit - Maximum requests allowed
    * @param windowSeconds - Time window in seconds
+   * @param burst - Optional burst allowance (extra tokens beyond limit)
    * @returns Rate check result
    */
-  checkRate(key: string, limit: number, windowSeconds: number): Promise<RateCheckResult>;
+  checkRate(key: string, limit: number, windowSeconds: number, burst?: number): Promise<RateCheckResult>;
+
+  /**
+   * Peek at rate limit status without incrementing (v1.7.0 - B5)
+   * Used by status endpoints to show quota without consuming it
+   * @param key - Unique identifier (e.g., "user_123:POST|/api")
+   * @param limit - Maximum requests allowed
+   * @param windowSeconds - Time window in seconds
+   * @returns Rate check result (without incrementing)
+   */
+  peekRate(key: string, limit: number, windowSeconds: number): Promise<RateCheckResult>;
 
   /**
    * Increment cost for a key

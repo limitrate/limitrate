@@ -184,6 +184,18 @@ export function validateIPAddress(ip: string): boolean {
     });
   }
 
+  // IPv4-mapped IPv6 addresses (e.g., ::ffff:127.0.0.1)
+  const ipv4MappedRegex = /^::ffff:(\d{1,3}\.){3}\d{1,3}$/i;
+  if (ipv4MappedRegex.test(ip)) {
+    // Extract IPv4 part and validate
+    const ipv4Part = ip.substring(7); // Remove "::ffff:" prefix
+    const parts = ipv4Part.split('.');
+    return parts.every(part => {
+      const num = parseInt(part, 10);
+      return num >= 0 && num <= 255;
+    });
+  }
+
   // Basic IPv6 validation (simplified)
   const ipv6Regex = /^([0-9a-fA-F]{1,4}:){7}[0-9a-fA-F]{1,4}$/;
   return ipv6Regex.test(ip);

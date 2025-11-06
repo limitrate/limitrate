@@ -88,22 +88,40 @@ export function extractIP(ip: string, forwardedFor?: string, trustProxy: boolean
 }
 
 /**
+ * Normalize IPv4-mapped IPv6 addresses to plain IPv4
+ * @param ip - IP address
+ * @returns Normalized IP address
+ */
+function normalizeIP(ip: string): string {
+  // Convert ::ffff:127.0.0.1 to 127.0.0.1
+  if (ip.toLowerCase().startsWith('::ffff:')) {
+    return ip.substring(7);
+  }
+  return ip;
+}
+
+/**
  * Check if IP is in allowlist/blocklist
  * @param ip - IP to check
  * @param list - List of IPs (supports CIDR notation)
  * @returns Whether IP matches
  */
 export function isIPInList(ip: string, list: string[]): boolean {
+  // Normalize both the IP being checked and the list entries
+  const normalizedIP = normalizeIP(ip);
+
   for (const entry of list) {
+    const normalizedEntry = normalizeIP(entry);
+
     // Exact match
-    if (entry === ip) {
+    if (normalizedEntry === normalizedIP) {
       return true;
     }
 
     // CIDR match (simplified - exact match for now, can enhance later)
-    if (entry.includes('/')) {
-      const [network] = entry.split('/');
-      if (ip.startsWith(network)) {
+    if (normalizedEntry.includes('/')) {
+      const [network] = normalizedEntry.split('/');
+      if (normalizedIP.startsWith(network)) {
         return true;
       }
     }

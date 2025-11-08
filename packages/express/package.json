@@ -1,6 +1,6 @@
 {
   "name": "@limitrate/express",
-  "version": "2.2.0",
+  "version": "3.0.0",
   "description": "Express middleware for LimitRate rate limiting and cost control",
   "main": "./dist/index.js",
   "module": "./dist/index.mjs",

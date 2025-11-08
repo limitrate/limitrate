@@ -13,8 +13,6 @@ import type {
   UserOverride,
 } from './types';
 import { EventEmitter } from './utils/events';
-import { PenaltyManager } from './penalty/manager';
-import { normalizeIP } from './utils/ipv6';
 
 export interface CheckContext {
   /** User identifier */
@@ -58,13 +56,11 @@ export class PolicyEngine {
   private store: Store;
   private policies: PolicyConfig;
   private events: EventEmitter;
-  private penaltyManager: PenaltyManager;
 
   constructor(store: Store, policies: PolicyConfig) {
     this.store = store;
     this.policies = policies;
     this.events = new EventEmitter();
-    this.penaltyManager = new PenaltyManager(store);
   }
 
   /**
@@ -211,42 +207,13 @@ export class PolicyEngine {
       throw new Error('No time window specified in rate rule');
     }
 
-    // Apply penalty/reward multiplier (v2.0.0 - D4)
-    const originalLimit = limit;
-    if (policy.penalty?.enabled) {
-      const multiplier = await this.penaltyManager.getMultiplier(context.user, context.endpoint);
-      limit = Math.floor(originalLimit * multiplier);
-      // Ensure at least 1 request is allowed
-      if (limit < 1) limit = 1;
-    }
-
-    // Apply IPv6 subnet normalization (v2.1.0 - D5)
-    // If user is an IP address and ipv6Subnet is configured, normalize to subnet
-    const normalizedUser = policy.ipv6Subnet ? normalizeIP(context.user, policy.ipv6Subnet) : context.user;
-
     // Build rate key: user:endpoint
-    const rateKey = `${normalizedUser}:${context.endpoint}`;
+    const rateKey = `${context.user}:${context.endpoint}`;
 
     // Check with store (pass burst if defined)
     const result = await this.store.checkRate(rateKey, limit, windowSeconds, burst);
 
     if (result.allowed) {
-      // Check for reward (v2.0.0 - D4)
-      if (policy.penalty?.enabled && policy.penalty.rewards) {
-        const shouldReward = this.penaltyManager.shouldGrantReward(
-          result.current,
-          originalLimit,
-          policy.penalty.rewards
-        );
-        if (shouldReward) {
-          await this.penaltyManager.applyReward(
-            context.user,
-            context.endpoint,
-            policy.penalty.rewards
-          );
-        }
-      }
-
       return {
         allowed: true,
         action: 'allow',
@@ -258,15 +225,6 @@ export class PolicyEngine {
           burstTokens: result.burstTokens,
         },
       };
-    }
-
-    // Rate limit exceeded - apply penalty (v2.0.0 - D4)
-    if (policy.penalty?.enabled && policy.penalty.onViolation) {
-      await this.penaltyManager.applyPenalty(
-        context.user,
-        context.endpoint,
-        policy.penalty.onViolation
-      );
     }
 
     await this.emitEvent({
@@ -366,11 +324,8 @@ export class PolicyEngine {
     const cap = dailyCap ?? hourlyCap!;
     const windowSeconds = dailyCap ? 86400 : 3600;
 
-    // Apply IPv6 subnet normalization (v2.1.0 - D5)
-    const normalizedUser = policy.ipv6Subnet ? normalizeIP(context.user, policy.ipv6Subnet) : context.user;
-
     // Build cost key: user:endpoint:cost
-    const costKey = `${normalizedUser}:${context.endpoint}:cost`;
+    const costKey = `${context.user}:${context.endpoint}:cost`;
 
     // Check with store
     const result = await this.store.incrementCost(costKey, cost, windowSeconds, cap);
@@ -474,9 +429,6 @@ export class PolicyEngine {
       return { allowed: true, action: 'allow', details: { used: 0, limit: 0, remaining: 0, resetInSeconds: 0 } };
     }
 
-    // Apply IPv6 subnet normalization (v2.1.0 - D5)
-    const normalizedUser = policy.ipv6Subnet ? normalizeIP(context.user, policy.ipv6Subnet) : context.user;
-
     // We check all time windows (per minute, per hour, per day)
     // If any limit is exceeded, block the request
     const checks: Array<{ limit: number; windowSeconds: number; windowLabel: string }> = [];
@@ -493,7 +445,7 @@ export class PolicyEngine {
 
     // Check each time window
     for (const check of checks) {
-      const tokenKey = `${normalizedUser}:${context.endpoint}:tokens:${check.windowLabel}`;
+      const tokenKey = `${context.user}:${context.endpoint}:tokens:${check.windowLabel}`;
       const result = await this.store.incrementTokens(
         tokenKey,
         context.tokens,

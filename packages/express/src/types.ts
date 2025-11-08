@@ -85,8 +85,8 @@ export interface LimitRateOptions {
 
   /**
    * Track endpoints for auto-discovery (v1.4.0 - B2)
-   * Set to false to disable tracking
-   * @default true
+   * Set to true to enable tracking
+   * @default false
    */
   trackEndpoints?: boolean;
 

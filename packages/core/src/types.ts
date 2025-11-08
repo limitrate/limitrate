@@ -4,12 +4,6 @@
 
 export type PlanName = 'free' | 'pro' | 'enterprise' | string;
 
-/**
- * IPv6 subnet prefix lengths (v2.1.0 - D5)
- * Used to group IPv6 addresses by subnet to prevent IP rotation bypass
- */
-export type IPv6SubnetPrefix = '/48' | '/56' | '/64' | '/80' | '/96' | '/112';
-
 export type EnforcementAction = 'allow' | 'block' | 'slowdown' | 'allow-and-log';
 
 export interface RateRule {
@@ -59,30 +53,6 @@ export interface ConcurrencyConfig {
   actionOnExceed?: 'queue' | 'block';
 }
 
-/**
- * Penalty/Reward configuration (v2.0.0 - D4)
- */
-export interface PenaltyConfig {
-  /** Enable penalty/reward system */
-  enabled?: boolean;
-  /** Penalty on rate limit violation */
-  onViolation?: {
-    /** Duration in seconds */
-    duration: number;
-    /** Multiplier for limit (0.5 = reduce to 50%) */
-    multiplier: number;
-  };
-  /** Reward for low usage */
-  rewards?: {
-    /** Duration in seconds */
-    duration: number;
-    /** Multiplier for limit (1.5 = increase to 150%) */
-    multiplier: number;
-    /** Trigger condition */
-    trigger: 'below_50_percent' | 'below_25_percent' | 'below_10_percent';
-  };
-}
-
 export interface EndpointPolicy {
   /** Rate limiting rule */
   rate?: RateRule;
@@ -90,10 +60,6 @@ export interface EndpointPolicy {
   cost?: CostRule;
   /** Concurrency limiting rule (v2.0.0 - D1) */
   concurrency?: ConcurrencyConfig;
-  /** Penalty/Reward configuration (v2.0.0 - D4) */
-  penalty?: PenaltyConfig;
-  /** IPv6 subnet grouping (v2.1.0 - D5) - group IPv6 addresses by subnet to prevent IP rotation bypass */
-  ipv6Subnet?: IPv6SubnetPrefix;
 }
 
 export type PolicyConfig = Record<

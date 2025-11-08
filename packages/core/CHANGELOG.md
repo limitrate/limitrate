@@ -1,5 +1,107 @@
 # @limitrate/core
 
+## 3.0.0
+
+### Major Changes
+
+- # v3.0.0 - Simplification & Focus Release
+
+  **Major breaking changes - see [MIGRATION.md](../../MIGRATION.md) for upgrade guide**
+
+  ## Breaking Changes
+
+  ### Removed Features
+
+  1. **Job Scheduler (D6)** - Removed built-in job scheduler
+
+     - **Reason:** Outside scope of rate limiting, better handled by dedicated job queue systems
+     - **Migration:** Use Bull, BullMQ, or Agenda for job scheduling
+     - **Files removed:** `packages/core/src/scheduler/`
+
+  2. **Penalty/Reward System (D4)** - Removed automatic penalty/reward system
+
+     - **Reason:** Too opinionated for a rate limiting library, abuse detection is separate concern
+     - **Migration:** Implement custom logic using `getUserOverride()` callback
+     - **Files removed:** `packages/core/src/penalty/`
+
+  3. **IPv6 Subnet Limiting (D5)** - Removed automatic IPv6 subnet grouping
+     - **Reason:** Better handled at CDN/proxy layer
+     - **Migration:** Handle IP normalization at CDN or in `identifyUser()` callback
+     - **Files removed:** `packages/core/src/utils/ipv6.ts`
+
+  ### Changed Defaults
+
+  4. **Endpoint Auto-Discovery (B2)** - Now opt-in instead of default-on
+     - **Breaking:** `trackEndpoints` now defaults to `false` (was `true`)
+     - **Migration:** Explicitly set `trackEndpoints: true` to re-enable
+     - **Reason:** Reduces overhead for users who don't need endpoint tracking
+
+  ## Non-Breaking Changes
+
+  - **Pre-Flight Validation (C3)** - Already utilities-only, no changes needed
+  - **Streaming Tracking (C4)** - Already utilities-only, no changes needed
+
+  ## Benefits
+
+  - **Smaller Bundle:** Removed ~8 files and unused code
+  - **Clearer API:** Fewer options = easier to understand and use correctly
+  - **Better Separation:** Job scheduling and abuse detection belong in dedicated tools
+  - **Improved Performance:** Less overhead, simpler execution paths
+
+  ## Migration Checklist
+
+  See [MIGRATION.md](../../MIGRATION.md) for detailed migration steps including:
+
+  - [ ] Remove Job Scheduler usage
+  - [ ] Remove Penalty/Reward configs
+  - [ ] Remove IPv6 Subnet configs
+  - [ ] Add `trackEndpoints: true` if using endpoint tracking
+  - [ ] Update tests
+  - [ ] Deploy and monitor
+
+  ## TypeScript Changes
+
+  ### Removed Types
+
+  - `PenaltyConfig`
+  - `PenaltyState`
+  - `IPv6SubnetPrefix`
+  - `ScheduledJob`
+  - `JobProcessor`
+  - `SchedulerOptions`
+
+  ### Updated Types
+
+  ```typescript
+  // v2.x
+  interface EndpointPolicy {
+    rate?: RateRule;
+    cost?: CostRule;
+    concurrency?: ConcurrencyConfig;
+    penalty?: PenaltyConfig; // ❌ Removed
+    ipv6Subnet?: IPv6SubnetPrefix; // ❌ Removed
+  }
+
+  // v3.0.0
+  interface EndpointPolicy {
+    rate?: RateRule;
+    cost?: CostRule;
+    concurrency?: ConcurrencyConfig;
+  }
+  ```
+
+  ## Metrics
+
+  - **Files removed:** 8 files total (4 test files, 2 feature directories, 1 utility, 1 integration)
+  - **Bundle size:** @limitrate/core: 73 KB, @limitrate/express: 17 KB
+  - **Tests:** 16/17 passing (1 Redis connectivity failure unrelated to changes)
+
+  ## Support
+
+  - **Migration Guide:** [MIGRATION.md](../../MIGRATION.md)
+  - **GitHub Issues:** https://github.com/yourusername/limitrate/issues
+  - **Simplification Progress:** [SIMPLIFICATION-PROGRESS.md](../../SIMPLIFICATION-PROGRESS.md)
+
 ## 2.2.0
 
 ### Minor Changes

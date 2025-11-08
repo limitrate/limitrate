@@ -10,6 +10,18 @@ Drop in 20 lines of config, never worry about bots draining your AI budget or us
 
 ---
 
+## ⚠️ v3.0.0 Breaking Changes
+
+**Upgrading from v2.x?** See [MIGRATION.md](./MIGRATION.md) for breaking changes and migration guide.
+
+**What's new in v3.0.0:**
+- 🎯 **Simplified & Focused** - Removed scope creep features to focus on core rate limiting
+- 🗑️ **Removed:** Job Scheduler, Penalty/Reward System, IPv6 Subnet Limiting
+- ⚙️ **Changed:** Endpoint Auto-Discovery now opt-in (set `trackEndpoints: true`)
+- 📦 **Smaller Bundle** - Leaner, faster, easier to use
+
+---
+
 ## Features
 
 - ✅ **Plan-Aware Policies** — Different limits for free/pro/enterprise tiers

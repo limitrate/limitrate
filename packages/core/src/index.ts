@@ -10,7 +10,6 @@ export type {
   RateRule,
   CostRule,
   ConcurrencyConfig,
-  PenaltyConfig,
   EndpointPolicy,
   PolicyConfig,
   StoreConfig,
@@ -20,7 +19,6 @@ export type {
   Store,
   UserOverride,
   UserOverridesConfig,
-  IPv6SubnetPrefix,
 } from './types';
 
 // Stores
@@ -81,13 +79,6 @@ export {
   clearAllLimiters,
 } from './concurrency/index';
 
-// Penalty/Reward System (v2.0.0 - D4)
-export { PenaltyManager } from './penalty/manager';
-export type { PenaltyState } from './penalty/manager';
-
-// IPv6 Subnet Limiting (v2.1.0 - D5)
-export { isIPv6, expandIPv6, getIPv6Subnet, normalizeIP } from './utils/ipv6';
-
-// Job Scheduler (v2.1.0 - D6)
-export { JobScheduler } from './scheduler';
-export type { ScheduledJob, JobProcessor, SchedulerOptions, JobStatus } from './scheduler';
+// Removed in v3.0.0: Penalty/Reward System (D4) - Implement via getUserOverride() if needed
+// Removed in v3.0.0: IPv6 Subnet Limiting (D5) - Handle at CDN/proxy layer
+// Removed in v3.0.0: Job Scheduler (D6) - Use Bull/BullMQ for job queuing

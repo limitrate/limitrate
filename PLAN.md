@@ -1,12 +1,14 @@
 # LimitRate — Implementation Plan
 
-**Status:** ✅ v2.2.0 Released | All Phases Complete! 🎉
+**Status:** ✅ v3.0.0 Simplified & Focused 🎯
 **Started:** 2025-11-04
-**Latest Release:** v2.2.0 (Nov 8, 2025) on npm
+**Latest Release:** v3.0.0 (Nov 8, 2025) - Simplification Release
 **Phase A Complete:** Core + Express + CLI ✅
 **Phase B Complete:** All 6 critical user-requested features ✅
 **Phase C Complete:** AI Differentiation - C1 ✅ | C2 ✅ | C3 ✅ | C4 ✅
-**Phase D Complete:** General Enhancement - D1 ✅ | D2 ✅ | D3 ✅ | D4 ✅ | D5 ✅ | D6 ✅
+**Phase D Complete:** General Enhancement - D1 ✅ | D2 ✅ | D3 ✅ | ~~D4~~ | ~~D5~~ | ~~D6~~
+
+**⚠️ v3.0.0 Breaking Changes:** Removed D4 (Penalty/Reward), D5 (IPv6 Subnet), D6 (Job Scheduler) to refocus on core rate limiting. See [MIGRATION.md](./MIGRATION.md) for upgrade guide.
 
 ---
 

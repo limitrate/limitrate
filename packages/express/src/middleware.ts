@@ -250,7 +250,8 @@ Or use shared store factory:
       });
 
       // Track endpoint for auto-discovery (v1.4.0 - B2)
-      if (options.trackEndpoints !== false) {
+      // Now opt-in only (v3.0.0)
+      if (options.trackEndpoints === true) {
         const tracker = getGlobalEndpointTracker();
         tracker.trackRequest(req.method, req.path, {
           hasRateLimit: true, // This endpoint IS protected by limitrate

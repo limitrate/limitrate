@@ -9,6 +9,8 @@ export type {
   EnforcementAction,
   RateRule,
   CostRule,
+  ConcurrencyConfig,
+  PenaltyConfig,
   EndpointPolicy,
   PolicyConfig,
   StoreConfig,
@@ -18,6 +20,7 @@ export type {
   Store,
   UserOverride,
   UserOverridesConfig,
+  IPv6SubnetPrefix,
 } from './types';
 
 // Stores
@@ -48,3 +51,43 @@ export type { EventHandler } from './utils/events';
 // Endpoint Tracking (v1.4.0 - B2)
 export { EndpointTracker, getGlobalEndpointTracker, setGlobalEndpointTracker } from './tracking/endpoints';
 export type { EndpointStats, EndpointTrackerOptions } from './tracking/endpoints';
+
+// Tokenizers (v1.5.0 - C2)
+export { createTokenizer, clearTokenizerCache } from './tokenizers';
+export type { Tokenizer, TokenizerFunction } from './tokenizers';
+
+// Pre-Flight Validation (v1.6.0 - C3)
+export {
+  validatePrompt,
+  formatValidationError,
+  getModelLimits,
+  getSuggestedAlternatives,
+  MODEL_LIMITS,
+} from './validation/index.js';
+export type { ValidationResult, ValidationOptions, ModelLimits } from './validation/index.js';
+
+// Streaming Response Tracking (v1.7.0 - C4)
+export {
+  StreamingTracker,
+  parseOpenAIChunk,
+  parseAnthropicChunk,
+  estimateTokens,
+} from './streaming/index.js';
+
+// Concurrency Limiting (v2.0.0 - D1)
+export {
+  ConcurrencyLimiter,
+  getConcurrencyLimiter,
+  clearAllLimiters,
+} from './concurrency/index';
+
+// Penalty/Reward System (v2.0.0 - D4)
+export { PenaltyManager } from './penalty/manager';
+export type { PenaltyState } from './penalty/manager';
+
+// IPv6 Subnet Limiting (v2.1.0 - D5)
+export { isIPv6, expandIPv6, getIPv6Subnet, normalizeIP } from './utils/ipv6';
+
+// Job Scheduler (v2.1.0 - D6)
+export { JobScheduler } from './scheduler';
+export type { ScheduledJob, JobProcessor, SchedulerOptions, JobStatus } from './scheduler';

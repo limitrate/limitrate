@@ -13,6 +13,8 @@ import type {
   UserOverride,
 } from './types';
 import { EventEmitter } from './utils/events';
+import { PenaltyManager } from './penalty/manager';
+import { normalizeIP } from './utils/ipv6';
 
 export interface CheckContext {
   /** User identifier */
@@ -27,6 +29,8 @@ export interface CheckContext {
   policyOverride?: EndpointPolicy;
   /** Optional user override (v1.6.0 - B4) */
   userOverride?: UserOverride | null;
+  /** Optional token count for this request (v1.4.0 - AI feature) */
+  tokens?: number;
 }
 
 export interface CheckResult {
@@ -35,7 +39,7 @@ export interface CheckResult {
   /** Enforcement action to take */
   action: EnforcementAction;
   /** Reason for decision */
-  reason?: 'rate_exceeded' | 'cost_exceeded';
+  reason?: 'rate_exceeded' | 'cost_exceeded' | 'token_limit_exceeded';
   /** Seconds to retry after (if blocked) */
   retryAfterSeconds?: number;
   /** Delay in milliseconds (if slowdown) */
@@ -54,11 +58,13 @@ export class PolicyEngine {
   private store: Store;
   private policies: PolicyConfig;
   private events: EventEmitter;
+  private penaltyManager: PenaltyManager;
 
   constructor(store: Store, policies: PolicyConfig) {
     this.store = store;
     this.policies = policies;
     this.events = new EventEmitter();
+    this.penaltyManager = new PenaltyManager(store);
   }
 
   /**
@@ -104,6 +110,16 @@ export class PolicyEngine {
       }
       // Preserve rate limit details for response headers
       finalDetails = rateResult.details;
+    }
+
+    // Check token limits (if defined and tokens provided) - v1.4.0
+    if (policy.rate && context.tokens !== undefined && context.tokens > 0) {
+      const tokenResult = await this.checkTokens(context, policy);
+      // Return early if blocked OR requires special handling
+      if (!tokenResult.allowed || tokenResult.action !== 'allow') {
+        return tokenResult;
+      }
+      // Token checks are additional to rate limits
     }
 
     // Check cost limit (if defined)
@@ -195,13 +211,42 @@ export class PolicyEngine {
       throw new Error('No time window specified in rate rule');
     }
 
+    // Apply penalty/reward multiplier (v2.0.0 - D4)
+    const originalLimit = limit;
+    if (policy.penalty?.enabled) {
+      const multiplier = await this.penaltyManager.getMultiplier(context.user, context.endpoint);
+      limit = Math.floor(originalLimit * multiplier);
+      // Ensure at least 1 request is allowed
+      if (limit < 1) limit = 1;
+    }
+
+    // Apply IPv6 subnet normalization (v2.1.0 - D5)
+    // If user is an IP address and ipv6Subnet is configured, normalize to subnet
+    const normalizedUser = policy.ipv6Subnet ? normalizeIP(context.user, policy.ipv6Subnet) : context.user;
+
     // Build rate key: user:endpoint
-    const rateKey = `${context.user}:${context.endpoint}`;
+    const rateKey = `${normalizedUser}:${context.endpoint}`;
 
     // Check with store (pass burst if defined)
     const result = await this.store.checkRate(rateKey, limit, windowSeconds, burst);
 
     if (result.allowed) {
+      // Check for reward (v2.0.0 - D4)
+      if (policy.penalty?.enabled && policy.penalty.rewards) {
+        const shouldReward = this.penaltyManager.shouldGrantReward(
+          result.current,
+          originalLimit,
+          policy.penalty.rewards
+        );
+        if (shouldReward) {
+          await this.penaltyManager.applyReward(
+            context.user,
+            context.endpoint,
+            policy.penalty.rewards
+          );
+        }
+      }
+
       return {
         allowed: true,
         action: 'allow',
@@ -215,7 +260,15 @@ export class PolicyEngine {
       };
     }
 
-    // Rate limit exceeded
+    // Rate limit exceeded - apply penalty (v2.0.0 - D4)
+    if (policy.penalty?.enabled && policy.penalty.onViolation) {
+      await this.penaltyManager.applyPenalty(
+        context.user,
+        context.endpoint,
+        policy.penalty.onViolation
+      );
+    }
+
     await this.emitEvent({
       timestamp: Date.now(),
       user: context.user,
@@ -313,8 +366,11 @@ export class PolicyEngine {
     const cap = dailyCap ?? hourlyCap!;
     const windowSeconds = dailyCap ? 86400 : 3600;
 
+    // Apply IPv6 subnet normalization (v2.1.0 - D5)
+    const normalizedUser = policy.ipv6Subnet ? normalizeIP(context.user, policy.ipv6Subnet) : context.user;
+
     // Build cost key: user:endpoint:cost
-    const costKey = `${context.user}:${context.endpoint}:cost`;
+    const costKey = `${normalizedUser}:${context.endpoint}:cost`;
 
     // Check with store
     const result = await this.store.incrementCost(costKey, cost, windowSeconds, cap);
@@ -404,6 +460,145 @@ export class PolicyEngine {
   }
 
   /**
+   * Check token limits (v1.4.0 - AI feature)
+   */
+  private async checkTokens(context: CheckContext, policy: EndpointPolicy): Promise<CheckResult> {
+    if (!policy.rate || !context.tokens) {
+      return { allowed: true, action: 'allow', details: { used: 0, limit: 0, remaining: 0, resetInSeconds: 0 } };
+    }
+
+    const { maxTokensPerMinute, maxTokensPerHour, maxTokensPerDay, actionOnExceed, slowdownMs } = policy.rate;
+
+    // Check if any token limits are configured
+    if (!maxTokensPerMinute && !maxTokensPerHour && !maxTokensPerDay) {
+      return { allowed: true, action: 'allow', details: { used: 0, limit: 0, remaining: 0, resetInSeconds: 0 } };
+    }
+
+    // Apply IPv6 subnet normalization (v2.1.0 - D5)
+    const normalizedUser = policy.ipv6Subnet ? normalizeIP(context.user, policy.ipv6Subnet) : context.user;
+
+    // We check all time windows (per minute, per hour, per day)
+    // If any limit is exceeded, block the request
+    const checks: Array<{ limit: number; windowSeconds: number; windowLabel: string }> = [];
+
+    if (maxTokensPerMinute) {
+      checks.push({ limit: maxTokensPerMinute, windowSeconds: 60, windowLabel: '1m' });
+    }
+    if (maxTokensPerHour) {
+      checks.push({ limit: maxTokensPerHour, windowSeconds: 3600, windowLabel: '1h' });
+    }
+    if (maxTokensPerDay) {
+      checks.push({ limit: maxTokensPerDay, windowSeconds: 86400, windowLabel: '1d' });
+    }
+
+    // Check each time window
+    for (const check of checks) {
+      const tokenKey = `${normalizedUser}:${context.endpoint}:tokens:${check.windowLabel}`;
+      const result = await this.store.incrementTokens(
+        tokenKey,
+        context.tokens,
+        check.windowSeconds,
+        check.limit
+      );
+
+      if (!result.allowed) {
+        // Token limit exceeded
+        await this.emitEvent({
+          timestamp: Date.now(),
+          user: context.user,
+          plan: context.plan,
+          endpoint: context.endpoint,
+          type: 'token_limit_exceeded',
+          window: check.windowLabel,
+          value: result.current,
+          threshold: check.limit,
+          tokens: context.tokens,
+        });
+
+        // Determine action
+        if (actionOnExceed === 'block') {
+          return {
+            allowed: false,
+            action: 'block',
+            reason: 'token_limit_exceeded',
+            retryAfterSeconds: result.resetInSeconds,
+            details: {
+              used: result.current,
+              limit: result.limit,
+              remaining: 0,
+              resetInSeconds: result.resetInSeconds,
+            },
+          };
+        }
+
+        if (actionOnExceed === 'slowdown') {
+          await this.emitEvent({
+            timestamp: Date.now(),
+            user: context.user,
+            plan: context.plan,
+            endpoint: context.endpoint,
+            type: 'slowdown_applied',
+            value: slowdownMs,
+          });
+
+          return {
+            allowed: true,
+            action: 'slowdown',
+            slowdownMs,
+            details: {
+              used: result.current,
+              limit: result.limit,
+              remaining: 0,
+              resetInSeconds: result.resetInSeconds,
+            },
+          };
+        }
+
+        if (actionOnExceed === 'allow-and-log') {
+          return {
+            allowed: true,
+            action: 'allow-and-log',
+            details: {
+              used: result.current,
+              limit: result.limit,
+              remaining: 0,
+              resetInSeconds: result.resetInSeconds,
+            },
+          };
+        }
+
+        // Default: allow
+        return {
+          allowed: true,
+          action: 'allow',
+          details: {
+            used: result.current,
+            limit: result.limit,
+            remaining: 0,
+            resetInSeconds: result.resetInSeconds,
+          },
+        };
+      }
+    }
+
+    // All token checks passed - emit tracking event
+    await this.emitEvent({
+      timestamp: Date.now(),
+      user: context.user,
+      plan: context.plan,
+      endpoint: context.endpoint,
+      type: 'token_usage_tracked',
+      tokens: context.tokens,
+    });
+
+    return {
+      allowed: true,
+      action: 'allow',
+      details: { used: 0, limit: 0, remaining: 0, resetInSeconds: 0 },
+    };
+  }
+
+  /**
    * Resolve policy for plan and endpoint
    */
   private resolvePolicy(plan: PlanName, endpoint: string): EndpointPolicy | null {
@@ -412,8 +607,8 @@ export class PolicyEngine {
       return null;
     }
 
-    // Check endpoint-specific policy first
-    if (planConfig.endpoints[endpoint]) {
+    // Check endpoint-specific policy first (v2.0.0: endpoints may not exist for defaults-only configs)
+    if (planConfig.endpoints?.[endpoint]) {
       return planConfig.endpoints[endpoint];
     }
 

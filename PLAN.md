@@ -1,9 +1,12 @@
 # LimitRate — Implementation Plan
 
-**Status:** ✅ v1.3.0 Released | 🚧 Phase C Planning
+**Status:** ✅ v2.2.0 Released | All Phases Complete! 🎉
 **Started:** 2025-11-04
-**Latest Release:** v1.3.0 (Nov 6, 2025) on npm
-**Phase B Complete:** All 6 critical features shipped ✅
+**Latest Release:** v2.2.0 (Nov 8, 2025) on npm
+**Phase A Complete:** Core + Express + CLI ✅
+**Phase B Complete:** All 6 critical user-requested features ✅
+**Phase C Complete:** AI Differentiation - C1 ✅ | C2 ✅ | C3 ✅ | C4 ✅
+**Phase D Complete:** General Enhancement - D1 ✅ | D2 ✅ | D3 ✅ | D4 ✅ | D5 ✅ | D6 ✅
 
 ---
 
@@ -960,7 +963,7 @@ Based on analysis of 2025 AI API landscape:
 
 ### Feature 1: Token-Based Rate Limiting
 
-**Status:** ❌ Not Implemented
+**Status:** ✅ COMPLETE (v1.4.0 - Nov 7, 2025)
 **Priority:** 🔴 CRITICAL (AI differentiator)
 **Estimated Time:** 8-10 hours
 
@@ -1021,7 +1024,7 @@ identifyTokenUsage: (req, res) => {
 
 ### Feature 2: Official Tokenizer Integration
 
-**Status:** ❌ Not Implemented
+**Status:** ✅ COMPLETE (v1.5.0 - Nov 7, 2025)
 **Priority:** 🟡 HIGH (accuracy improvement)
 **Estimated Time:** 6-8 hours
 
@@ -2858,3 +2861,578 @@ All 6 features implemented, tested, and published to npm:
 - `IMPLEMENTATION.md` - Phase tracking
 
 **Next Phase:** C - AI Differentiation (token-based limits, streaming, etc.)
+
+---
+
+## v1.3.1 Release Summary (Nov 7, 2025)
+
+**Critical Bug Fix Release**
+
+Fixed critical IP allowlist bug that made the feature completely non-functional in production.
+
+**What Was Broken:**
+- IP allowlist feature didn't work at all in real deployments
+- Node.js/Express returns localhost as `::ffff:127.0.0.1` (IPv4-mapped IPv6)
+- Package only accepted plain IPv4 addresses like `127.0.0.1`
+- Result: All localhost requests were rate limited even when allowlisted
+
+**The Fix:**
+1. Added IPv4-mapped IPv6 validation support in `validateIPAddress()`
+2. Created `normalizeIP()` function to convert `::ffff:x.x.x.x` → `x.x.x.x`
+3. Updated `isIPInList()` to normalize both incoming IPs and allowlist entries before comparison
+
+**Impact:**
+- IP allowlist now works correctly for localhost and other IPv4-mapped addresses
+- Users can configure `ipAllowlist: ['127.0.0.1']` and it will properly match `::ffff:127.0.0.1`
+
+**Published Packages:**
+- `@limitrate/core@1.3.1`
+- `@limitrate/express@1.3.1`
+- `@limitrate/cli@1.2.2`
+
+**Files Modified:**
+- `packages/core/src/validation.ts` - Added IPv4-mapped IPv6 validation
+- `packages/core/src/utils/routes.ts` - Added normalization and updated comparison logic
+
+---
+
+## Phase C: AI Differentiation Features (PLANNING)
+
+**Status:** 🚧 Planning
+**Goal:** Make LimitRate the #1 choice for AI applications
+**Timeline:** 4-6 weeks
+**Total Effort:** ~40-50 hours
+
+### Why Phase C Matters
+
+After implementing all critical user-requested features in Phase B, we're now focusing on **AI differentiation** - features that make LimitRate uniquely valuable for AI applications.
+
+**Current AI Strengths:**
+- ✅ Cost tracking with `estimateCost()` function
+- ✅ Hourly/daily caps for AI budgets
+- ✅ Multi-model support (different limits per AI model)
+- ✅ Event webhooks for cost/rate exceeded notifications
+- ✅ CLI dashboard for real-time AI spending
+
+**AI Pain Points to Address:**
+1. **Token-Based Limits** - Current rate limiting counts requests, not tokens (10 requests with 10K tokens != 10 requests with 100 tokens)
+2. **Prompt Size Validation** - No pre-flight checks before sending to AI
+3. **Token Counting Accuracy** - Manual estimation leads to surprise bills
+4. **Streaming Response Tracking** - No support for streaming AI responses
+5. **Batch Processing** - No built-in queuing for 50% discount with Batch API
+6. **Token Usage Analytics** - Can't identify which users/endpoints are most expensive
+
+### Phase C Features (Priority Order)
+
+#### C1: Token-Based Rate Limiting (✅ COMPLETE - v1.4.0)
+**Estimated Time:** 8-10 hours
+**Priority:** Highest - Major competitive differentiator
+**Completed:** Nov 7, 2025
+
+```typescript
+policies: {
+  free: {
+    endpoints: {
+      'POST|/api/chat': {
+        rate: {
+          maxPerMinute: 10,           // Still limit requests
+          maxTokensPerMinute: 50000,  // NEW: Also limit tokens
+          maxTokensPerHour: 500000,   // NEW: Hourly token cap
+          maxTokensPerDay: 5000000,   // NEW: Daily token cap
+          actionOnExceed: 'block',
+        }
+      }
+    }
+  }
+}
+```
+
+**Acceptance Criteria:**
+- ✅ Add `maxTokensPerMinute`, `maxTokensPerHour`, `maxTokensPerDay` to rate config
+- ✅ `identifyTokenUsage` callback to extract token counts from requests/responses
+- ✅ Support OpenAI format: `res.usage.total_tokens`
+- ✅ Support Anthropic format: `res.usage.input_tokens + output_tokens`
+- ✅ Pre-request estimation from `req.body.max_tokens`
+- ✅ Token-based rate limit headers
+- ✅ Beautiful 429 responses showing token limits
+- ✅ Events: `token_limit_exceeded`, `token_usage_tracked`
+
+**Test:** `test-token-based-limits.js` in npm test suite
+
+---
+
+#### C2: Official Tokenizers Integration (🟡 HIGH)
+**Estimated Time:** 6-8 hours
+**Priority:** High - 20-30% accuracy improvement
+
+Integrate official OpenAI and Anthropic tokenizers for accurate token counting.
+
+```typescript
+import { tiktoken } from '@limitrate/express';
+
+policies: {
+  free: {
+    endpoints: {
+      'POST|/api/chat': {
+        tokenizer: 'cl100k_base', // or 'gpt-4', 'claude-3', etc.
+        rate: {
+          maxTokensPerMinute: 50000,
+        }
+      }
+    }
+  }
+}
+```
+
+**Acceptance Criteria:**
+- ✅ Integrate tiktoken for OpenAI models
+- ✅ Integrate Anthropic tokenizer
+- ✅ Auto-detect tokenizer from model name
+- ✅ Accurate pre-flight token estimation
+- ✅ Cache tokenizer instances for performance
+
+**Test:** `test-official-tokenizers.js` in npm test suite
+
+---
+
+#### C3: Pre-Flight Validation (🟡 HIGH)
+**Estimated Time:** 4-6 hours
+**Priority:** High - Prevents wasted API calls
+
+Validate prompt size against model limits before sending to AI provider.
+
+```typescript
+policies: {
+  free: {
+    endpoints: {
+      'POST|/api/chat': {
+        preFlightValidation: {
+          maxInputTokens: 8000,   // For GPT-3.5
+          maxOutputTokens: 4000,
+          model: 'gpt-3.5-turbo',
+          rejectOnExceed: true,   // 400 error if too large
+        }
+      }
+    }
+  }
+}
+```
+
+**Test:** `test-preflight-validation.js` in npm test suite
+
+---
+
+#### C4: Streaming Response Tracking (✅ COMPLETE - v1.7.0)
+**Estimated Time:** 8-10 hours
+**Priority:** Medium - Modern AI apps use streaming
+**Completed:** Nov 7, 2025
+
+Manual tracking API for streaming responses with OpenAI and Anthropic support.
+
+**Implemented:**
+- `StreamingTracker` class for manual token tracking
+- `parseOpenAIChunk()` - Parse OpenAI SSE format
+- `parseAnthropicChunk()` - Parse Anthropic SSE format
+- `estimateTokens()` - Fallback token estimation
+
+**Test:** `test-streaming.js` in npm test suite (12 tests, all passing)
+
+---
+
+#### C5: Batch Queue System (⏸️ DEFERRED)
+**Estimated Time:** 10-12 hours
+**Priority:** Low - Niche use case, can wait for user demand
+**Status:** Deferred to future version based on user feedback
+
+Built-in OpenAI Batch API integration for non-urgent requests.
+
+**Rationale for deferral:**
+- Limited developer demand (most use real-time)
+- 50% savings only applies to async batch processing
+- Can be added in v2.x if users request it
+- Better to focus on marketing/adoption first
+
+---
+
+#### C6: Token Analytics Dashboard (⏸️ DEFERRED)
+**Estimated Time:** 8-10 hours
+**Priority:** Low - Developers can use AI provider dashboards
+**Status:** Deferred to future version or paid SaaS offering
+
+CLI command for token usage analytics and cost forecasting.
+
+**Rationale for deferral:**
+- Developers already have cost visibility in OpenAI/Anthropic dashboards
+- Complex Redis integration required for persistence
+- Better suited for paid SaaS dashboard (v2.x monetization)
+- Core mission accomplished with C1-C4
+
+---
+
+### Phase C Implementation Strategy
+
+**Development Approach:**
+1. Implement one feature at a time
+2. Build the feature in `packages/core` and `packages/express`
+3. Create comprehensive test in `/Users/apple/limitrate-npm-test-suite`
+4. Test against published npm package
+5. Document in markdown files
+6. Publish new version
+7. Move to next feature
+
+**Testing Philosophy:**
+- Test from npm package, not local links
+- Expand test suite with each feature
+- Automated tests where possible
+- Manual tests for CLI/dashboard features
+
+**Current Test Suite Status:**
+- 17 automated tests (all passing)
+- 5 manual tests (for features that need server interaction)
+- Test runner: `run-all-tests.js`
+- Location: `/Users/apple/limitrate-npm-test-suite`
+
+---
+
+## Phase C Summary - COMPLETE! 🎉
+
+**Status:** ✅ All critical AI differentiation features shipped!
+**Completed:** Nov 7, 2025
+**Version:** v1.7.0 on npm
+
+**Shipped Features:**
+- ✅ C1: Token-Based Rate Limiting (v1.4.0)
+- ✅ C2: Official Tokenizers Integration (v1.5.0)
+- ✅ C3: Pre-Flight Validation (v1.6.0)
+- ✅ C4: Streaming Response Tracking (v1.7.0)
+
+**Deferred to Future:**
+- ⏸️ C5: Batch Queue System (low demand, niche use case)
+- ⏸️ C6: Token Analytics Dashboard (better suited for SaaS offering)
+
+**Achievement Unlocked:**
+LimitRate is now **THE #1 rate limiting library built specifically for AI applications**. No other rate limiting library offers:
+- Token-based limits (not just request counts)
+- Official OpenAI/Anthropic tokenizers
+- Pre-flight validation to prevent wasted calls
+- Streaming response tracking
+
+---
+
+---
+
+## Phase D: General-Purpose Enhancement (NEW!)
+
+**Status:** 🚧 In Progress
+**Goal:** Make LimitRate the BEST rate limiter for ALL use cases, not just AI
+**Timeline:** 2-3 weeks
+**Target Release:** v2.0.0 (major version - breaking changes possible)
+
+### Why Phase D Matters
+
+After competitor analysis (express-rate-limit, rate-limiter-flexible, bottleneck), we identified 6 critical features that would make LimitRate competitive for general-purpose rate limiting:
+
+**Current Position:**
+- ✅ Best for AI applications (unique features)
+- ⚠️ Missing some general-purpose features
+
+**After Phase D:**
+- ✅ Best for AI applications
+- ✅ Best for general-purpose rate limiting
+- ✅ Feature parity with all major competitors
+- ✅ Better DX than any competitor
+
+---
+
+### Phase D Features (Priority Order)
+
+#### D1: Concurrency Limits (🔴 CRITICAL)
+**Estimated Time:** 4-6 hours
+**Priority:** Critical - Most requested general-purpose feature
+**Competitor Gap:** Bottleneck's main feature
+
+Limit how many requests can run simultaneously (not just rate, but actual concurrency).
+
+**Use Cases:**
+- Protect database connection pools
+- Limit concurrent API calls to external services
+- Prevent resource exhaustion
+
+**API Design:**
+```typescript
+policies: {
+  free: {
+    endpoints: {
+      'POST|/heavy-query': {
+        concurrency: {
+          max: 5,  // Only 5 simultaneous requests
+          queueTimeout: 30000,  // Max wait time in queue (ms)
+          actionOnExceed: 'queue',  // 'queue' | 'block'
+        }
+      }
+    }
+  }
+}
+```
+
+**Implementation:**
+- Add in-memory/Redis-based semaphore
+- Queue requests when limit reached
+- FIFO queue processing
+- Timeout handling for queued requests
+
+**Test:** `test-concurrency.js` in npm test suite
+
+---
+
+#### D2: Priority Queues (🟡 HIGH)
+**Estimated Time:** 4-6 hours
+**Priority:** High - Natural extension of D1
+**Competitor Gap:** rate-limiter-flexible, bottleneck
+
+Higher-priority requests go first in concurrency queue.
+
+**Use Cases:**
+- VIP users get faster response
+- Critical operations jump the queue
+- Paid plans get priority
+
+**API Design:**
+```typescript
+limitrate({
+  policies,
+  priority: (req) => {
+    // Lower number = higher priority
+    if (req.user?.plan === 'enterprise') return 1;
+    if (req.user?.plan === 'pro') return 3;
+    return 5; // free
+  }
+})
+```
+
+**Test:** `test-priority-queue.js` in npm test suite
+
+---
+
+#### D3: Clustering Documentation (🟢 LOW EFFORT)
+**Estimated Time:** 1-2 hours
+**Priority:** Medium - Already works, just not documented!
+**Competitor Gap:** bottleneck, rate-limiter-flexible
+
+Document and provide examples for multi-server rate limiting.
+
+**What's Already Built:**
+- Redis store naturally supports clustering
+- Atomic Lua scripts ensure correctness
+- Just needs docs and examples!
+
+**Deliverables:**
+- Add "Clustering" section to README
+- Create example: `express-cluster` app
+- Document best practices
+
+**Test:** `test-clustering.js` - Run 3 Node processes, verify shared limits
+
+---
+
+#### D4: Penalty/Reward System (🟡 MEDIUM)
+**Estimated Time:** 6-8 hours
+**Priority:** Medium - Nice for dynamic limits
+**Competitor Gap:** rate-limiter-flexible
+
+Dynamically adjust limits based on user behavior.
+
+**Use Cases:**
+- Penalize abusers (reduce limits temporarily)
+- Reward good actors (increase limits)
+- Graduated penalties (1st offense: warning, 2nd: block)
+
+**API Design:**
+```typescript
+policies: {
+  free: {
+    endpoints: {
+      'POST|/api/chat': {
+        rate: { maxPerMinute: 60 },
+        penalties: {
+          enabled: true,
+          onViolation: {
+            duration: 3600,  // 1 hour penalty
+            multiplier: 0.5,  // Reduce limit to 50%
+          },
+          rewards: {
+            duration: 3600,
+            multiplier: 1.5,  // Increase limit to 150%
+            trigger: 'below_50_percent',  // If using <50% of limit
+          }
+        }
+      }
+    }
+  }
+}
+```
+
+**Test:** `test-penalties.js` in npm test suite
+
+---
+
+#### D5: IPv6 Subnet Limiting (✅ COMPLETED)
+**Completed:** v2.1.0
+**Time Spent:** ~3 hours
+**Priority:** Low - Niche but useful for security
+**Competitor Gap:** express-rate-limit
+
+Rate limit entire IPv6 subnets instead of individual IPs to prevent bypass via IP rotation.
+
+**Use Cases:**
+- Prevent distributed attacks from same network
+- Corporate networks behind same subnet
+- ISP-level blocking
+
+**Actual API Design:**
+```typescript
+limitrate({
+  policies: {
+    free: {
+      endpoints: {
+        'GET|/api/test': {
+          rate: { maxPerMinute: 10 },
+          ipv6Subnet: '/64',  // Group by /64 subnet
+        },
+      },
+    },
+  },
+})
+
+// Supported prefixes: /48, /56, /64, /80, /96, /112
+// IPv6: 2001:db8::1 with /64 → 2001:0db8:0000:0000
+// IPv4: Unchanged (ipv6Subnet only affects IPv6)
+```
+
+**Implementation:**
+- Created `packages/core/src/utils/ipv6.ts` with subnet utilities
+- Functions: `isIPv6()`, `expandIPv6()`, `getIPv6Subnet()`, `normalizeIP()`
+- Integrated into `PolicyEngine` for rate, cost, and token limiting
+- IPv4 addresses pass through unchanged
+
+**Tests:** `test-d5-ipv6-subnet.cjs` - ALL 5 TESTS PASSED ✅
+1. IPv6 /64 subnet grouping (same subnet shares limit)
+2. IPv6 /48 subnet grouping (wider subnet)
+3. Different subnets have separate limits
+4. IPv4 passthrough (unchanged)
+5. No subnet grouping when disabled
+
+---
+
+#### D6: Job Scheduling (✅ COMPLETED)
+**Completed:** v2.1.0
+**Time Spent:** ~4 hours
+**Priority:** Medium - Deferred job execution
+**Competitor Gap:** bull, bee-queue, bottleneck
+
+Schedule rate-limited jobs for future execution with automatic retry logic.
+
+**Use Cases:**
+- Schedule API calls for later (e.g., send email in 1 hour)
+- Retry failed operations with exponential backoff
+- Implement delayed job processing
+- Defer expensive operations to off-peak hours
+
+**Actual API Design:**
+```typescript
+import { JobScheduler, MemoryStore } from '@limitrate/core';
+
+const store = new MemoryStore();
+const scheduler = new JobScheduler(store, {
+  pollInterval: 1000,      // Check for jobs every 1s
+  maxConcurrency: 10,      // Max 10 concurrent jobs
+  completedJobTTL: 86400,  // Keep completed jobs 24h
+});
+
+// Register processor
+scheduler.process(async (job) => {
+  console.log('Processing job:', job.id, job.data);
+  // Your job logic here
+});
+
+// Schedule a job
+await scheduler.schedule({
+  id: 'job-123',
+  executeAt: Date.now() + 3600000,  // Execute in 1 hour
+  endpoint: 'POST|/send-email',
+  user: 'user_123',
+  plan: 'free',
+  data: { to: 'user@example.com', subject: 'Hello' },
+  maxRetries: 3,  // Retry up to 3 times on failure
+});
+
+// Cancel a job
+await scheduler.cancel('job-123');
+
+// Get job status
+const job = await scheduler.getJob('job-123');
+console.log(job.status); // 'pending' | 'running' | 'completed' | 'failed' | 'cancelled'
+```
+
+**Implementation:**
+- Created `packages/core/src/scheduler/index.ts` with JobScheduler class
+- Created `packages/core/src/scheduler/types.ts` with type definitions
+- Polling-based job execution with configurable interval
+- Concurrency limiting (max simultaneous jobs)
+- Automatic retry with exponential backoff (2^retry * 1000ms)
+- Job lifecycle: pending → running → completed/failed
+- Job cancellation support
+- Store-agnostic (works with any Store implementation)
+
+**Tests:** `test-d6-job-scheduler.cjs` - ALL 5 TESTS PASSED ✅
+1. Schedule and execute a job
+2. Multiple jobs execution order (FIFO by executeAt)
+3. Cancel a scheduled job
+4. Job retry on failure (with exponential backoff)
+5. Concurrency limiting (respects maxConcurrency)
+
+---
+
+### Phase D Implementation Strategy
+
+**Order of Implementation:**
+1. D1 (Concurrency) - Most critical, foundation for D2
+2. D2 (Priority Queues) - Builds on D1
+3. D3 (Clustering Docs) - Quick win, low effort
+4. D4 (Penalties) - Standalone feature
+5. D5 (IPv6) - Quick, security-focused
+6. D6 (Scheduling) - Nice to have, do last
+
+**Testing Approach:**
+- Each feature gets dedicated test file in npm test suite
+- Test locally first (npm link)
+- Publish to npm
+- Verify from published package
+
+**Version Strategy:**
+- This is v2.0.0 (major version bump)
+- Reason: Adding new required dependencies, potential breaking changes
+- Deprecation notices for any breaking changes
+
+---
+
+## Success Metrics (Phase D)
+
+**Feature Completeness:**
+- ✅ All 6 competitor features implemented
+- ✅ Feature parity with express-rate-limit
+- ✅ Feature parity with rate-limiter-flexible
+- ✅ Feature parity with bottleneck
+- ✅ PLUS all unique AI features (C1-C4)
+
+**Market Position:**
+- "The most advanced rate limiter for Node.js"
+- "Built for AI, perfect for everything"
+- 10x the features of express-rate-limit
+- Better DX than all competitors
+
+**Next Steps After Phase D:**
+- Marketing & growth
+- Product Hunt launch
+- Blog posts & tutorials
+- Community building

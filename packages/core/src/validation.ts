@@ -113,12 +113,17 @@ export function validatePolicyConfig(config: PolicyConfig): void {
       throw new ValidationError(`Plan '${plan}' config must be an object`);
     }
 
-    if (!planConfig.endpoints || typeof planConfig.endpoints !== 'object') {
-      throw new ValidationError(`Plan '${plan}' must have 'endpoints' object`);
+    // v2.0.0: Allow defaults-only configuration (no endpoints required if defaults exists)
+    const hasEndpoints = planConfig.endpoints && typeof planConfig.endpoints === 'object';
+    const hasDefaults = planConfig.defaults && typeof planConfig.defaults === 'object';
+
+    if (!hasEndpoints && !hasDefaults) {
+      throw new ValidationError(`Plan '${plan}' must have 'endpoints' or 'defaults' object`);
     }
 
     // Validate endpoint policies
-    for (const [endpoint, policy] of Object.entries(planConfig.endpoints)) {
+    if (hasEndpoints) {
+      for (const [endpoint, policy] of Object.entries(planConfig.endpoints)) {
       const basePath = `policies.${plan}.endpoints['${endpoint}']`;
 
       if (policy.rate) {
@@ -129,8 +134,10 @@ export function validatePolicyConfig(config: PolicyConfig): void {
         validateCostRule(policy.cost, `${basePath}.cost`);
       }
 
-      if (!policy.rate && !policy.cost) {
-        throw new ValidationError(`${basePath} must have at least one of: rate, cost`);
+        // v2.0.0: Allow concurrency-only policies
+        if (!policy.rate && !policy.cost && !policy.concurrency) {
+          throw new ValidationError(`${basePath} must have at least one of: rate, cost, concurrency`);
+        }
       }
     }
 

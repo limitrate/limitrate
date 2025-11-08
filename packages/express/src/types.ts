@@ -119,6 +119,30 @@ export interface LimitRateOptions {
    * @example async (userId) => db.userLimits.findOne({ userId })
    */
   getUserOverride?: (userId: string, req: Request) => Promise<UserOverride | null> | UserOverride | null;
+
+  /**
+   * Extract token count from request/response (v1.4.0 - AI feature)
+   * Called BEFORE request to estimate tokens (for pre-flight check)
+   * Pass the request object when called before processing
+   * @example (req) => req.body.max_tokens || 1000
+   */
+  identifyTokenUsage?: (req: Request) => number | Promise<number>;
+
+  /**
+   * Extract actual token count from response (v1.4.0 - AI feature)
+   * Called AFTER request completes to track actual token usage
+   * Use res.locals or intercepted response body to get actual tokens
+   * @example (res) => res.locals.openai?.usage?.total_tokens || 0
+   */
+  extractTokenUsage?: (res: Response) => number | Promise<number>;
+
+  /**
+   * Priority function for concurrency queue (v2.0.0 - D2)
+   * Lower number = higher priority (goes first in queue)
+   * @default () => 5
+   * @example (req) => req.user?.plan === 'enterprise' ? 1 : req.user?.plan === 'pro' ? 3 : 5
+   */
+  priority?: (req: Request) => number;
 }
 
 /**
@@ -147,7 +171,7 @@ export interface DryRunEvent {
 
 export interface BlockedResponse {
   ok: false;
-  reason: 'rate_limited' | 'cost_exceeded' | 'ip_blocked';
+  reason: 'rate_limited' | 'cost_exceeded' | 'token_limit_exceeded' | 'ip_blocked';
   message: string;
   retry_after_seconds?: number;
   used: number;

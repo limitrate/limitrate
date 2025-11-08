@@ -12,6 +12,7 @@ import {
   extractIP,
   isIPInList,
   getGlobalEndpointTracker,
+  getConcurrencyLimiter,
 } from '@limitrate/core';
 import type { Store } from '@limitrate/core';
 import type { Request, Response, NextFunction, RequestHandler } from 'express';
@@ -159,6 +160,52 @@ Or use shared store factory:
       // Check for route-specific policy override
       const policyOverride = (req as any).__limitrate_policy;
 
+      // Get concurrency config from policy (v2.0.0 - D1)
+      const concurrencyConfig = policyOverride?.concurrency ||
+        options.policies[plan]?.endpoints?.[endpoint]?.concurrency ||
+        options.policies[plan]?.defaults?.concurrency;
+
+      // Acquire concurrency slot if configured
+      let releaseConcurrency: (() => void) | null = null;
+      if (concurrencyConfig) {
+        try {
+          const limiter = getConcurrencyLimiter(endpoint, concurrencyConfig);
+
+          // Get priority from user function (v2.0.0 - D2)
+          // Lower number = higher priority (default: 5)
+          let priority = 5;
+          if (options.priority) {
+            try {
+              priority = options.priority(req);
+              // Validate priority
+              if (typeof priority !== 'number' || priority < 0 || !isFinite(priority)) {
+                console.warn('[LimitRate] Invalid priority value:', priority, '- using default (5)');
+                priority = 5;
+              }
+            } catch (error) {
+              console.warn('[LimitRate] priority() function failed:', error, '- using default (5)');
+              priority = 5;
+            }
+          }
+
+          releaseConcurrency = await limiter.acquire(priority);
+        } catch (error) {
+          // Concurrency limit reached (block mode) or queue timeout
+          send429Response(res, {
+            reason: 'rate_limited',
+            plan,
+            endpoint,
+            used: concurrencyConfig.max,
+            allowed: concurrencyConfig.max,
+            retryAfterSeconds: 1,
+            upgradeHint: typeof options.upgradeHint === 'function'
+              ? options.upgradeHint(plan)
+              : options.upgradeHint,
+          });
+          return;
+        }
+      }
+
       // Check for user override (v1.6.0 - B4)
       let userOverride = null;
       try {
@@ -175,6 +222,22 @@ Or use shared store factory:
         // Continue without override
       }
 
+      // Extract token count if provided (v1.4.0 - AI feature)
+      let tokens: number | undefined;
+      if (options.identifyTokenUsage) {
+        try {
+          tokens = await Promise.resolve(options.identifyTokenUsage(req));
+          // Validate token count
+          if (tokens !== undefined && (typeof tokens !== 'number' || tokens < 0 || !isFinite(tokens))) {
+            console.warn('[LimitRate] Invalid token count:', tokens);
+            tokens = undefined;
+          }
+        } catch (error) {
+          console.warn('[LimitRate] identifyTokenUsage failed:', error);
+          tokens = undefined;
+        }
+      }
+
       // Check policy
       const result = await engine.check({
         user,
@@ -183,6 +246,7 @@ Or use shared store factory:
         costContext: req, // Pass request as cost context
         policyOverride, // Pass route-specific override if exists
         userOverride, // Pass user override if exists
+        tokens, // Pass token count if extracted (v1.4.0)
       });
 
       // Track endpoint for auto-discovery (v1.4.0 - B2)
@@ -278,7 +342,16 @@ Or use shared store factory:
             ? options.upgradeHint(plan)
             : options.upgradeHint;
 
-        const reason = result.reason === 'rate_exceeded' ? 'rate_limited' : (result.reason || 'rate_limited');
+        // Map internal reason to response reason
+        let reason: 'rate_limited' | 'cost_exceeded' | 'token_limit_exceeded' = 'rate_limited';
+        if (result.reason === 'rate_exceeded') {
+          reason = 'rate_limited';
+        } else if (result.reason === 'cost_exceeded') {
+          reason = 'cost_exceeded';
+        } else if (result.reason === 'token_limit_exceeded') {
+          reason = 'token_limit_exceeded';
+        }
+
         send429Response(res, {
           reason,
           plan,
@@ -289,6 +362,22 @@ Or use shared store factory:
           upgradeHint,
         });
         return;
+      }
+
+      // Wrap next() to ensure concurrency slot is released
+      if (releaseConcurrency) {
+        // Ensure release is only called once (both finish and close can fire)
+        let released = false;
+        const releaseOnce = () => {
+          if (!released) {
+            released = true;
+            releaseConcurrency();
+          }
+        };
+
+        // Release slot when response finishes or errors
+        res.on('finish', releaseOnce);
+        res.on('close', releaseOnce);
       }
 
       // Allow request

@@ -1,5 +1,252 @@
 # @limitrate/cli
 
+## 1.3.2
+
+### Patch Changes
+
+- Updated dependencies
+  - @limitrate/core@2.2.0
+
+## 1.3.1
+
+### Patch Changes
+
+- Updated dependencies
+- Updated dependencies [e471d9b]
+  - @limitrate/core@2.1.0
+
+## 1.3.0
+
+### Minor Changes
+
+- # v2.0.0: Phase D - General-Purpose Enhancement
+
+  This major release transforms LimitRate into a comprehensive rate limiting solution with enterprise-grade features.
+
+  ## 🚀 New Features
+
+  ### D1: Concurrency Limits
+
+  Control how many requests can run simultaneously per user/endpoint.
+
+  ```typescript
+  endpoints: {
+    'POST|/api/heavy': {
+      concurrency: {
+        max: 5,                    // Max 5 concurrent requests
+        queueTimeout: 30000,       // 30 second queue timeout
+        actionOnExceed: 'queue'    // Queue or block
+      }
+    }
+  }
+  ```
+
+  **Key capabilities:**
+
+  - Semaphore-style concurrency control
+  - Queue mode: Wait for slot to become available
+  - Block mode: Reject immediately when limit reached
+  - Per-user AND per-endpoint limiting
+  - Configurable queue timeouts
+
+  ### D2: Priority Queues
+
+  Process high-priority requests first when using concurrency queues.
+
+  ```typescript
+  app.use(
+    limitrate({
+      // ...config
+      priority: (req) => {
+        // Lower number = higher priority
+        if (req.headers["x-plan"] === "enterprise") return 1;
+        if (req.headers["x-plan"] === "pro") return 3;
+        return 5; // free tier
+      },
+    })
+  );
+  ```
+
+  **Key capabilities:**
+
+  - Priority-based request ordering
+  - FIFO within same priority level
+  - Integrates with concurrency limiting
+  - Plan-based or custom priority functions
+
+  ### D3: Clustering Support
+
+  Share rate limits across multiple Node.js processes/servers.
+
+  ```typescript
+  import { createSharedMemoryStore } from '@limitrate/express';
+
+  // Create ONE shared store instance
+  const sharedStore = createSharedMemoryStore();
+
+  // Use same instance across all servers
+  app1.use(limitrate({ store: sharedStore, ... }));
+  app2.use(limitrate({ store: sharedStore, ... }));
+  app3.use(limitrate({ store: sharedStore, ... }));
+  ```
+
+  **Production clustering:**
+
+  ```typescript
+  // Use Redis for true multi-process clustering
+  import { createSharedRedisStore } from "@limitrate/express";
+
+  const store = createSharedRedisStore({
+    url: process.env.REDIS_URL,
+  });
+  ```
+
+  ### D4: Penalty/Reward System
+
+  Dynamically adjust rate limits based on user behavior.
+
+  ```typescript
+  endpoints: {
+    'GET|/api/data': {
+      rate: {
+        maxPerMinute: 100,
+        actionOnExceed: 'block',
+      },
+      penalty: {
+        enabled: true,
+        onViolation: {
+          duration: 300,       // 5 minute penalty
+          multiplier: 0.5      // Reduce to 50% (50 req/min)
+        },
+        rewards: {
+          duration: 300,
+          multiplier: 1.5,     // Increase to 150% (150 req/min)
+          trigger: 'below_25_percent'  // Reward light usage
+        }
+      }
+    }
+  }
+  ```
+
+  **Key capabilities:**
+
+  - Automatic penalty on violations (reduces limits)
+  - Automatic rewards for low usage (increases limits)
+  - Configurable duration (TTL)
+  - Configurable multipliers
+  - Trigger thresholds for rewards (10%, 25%, 50%)
+
+  ## 🔧 Breaking Changes
+
+  ### Store Interface Extension
+
+  All custom store implementations must now implement three additional methods:
+
+  ```typescript
+  interface Store {
+    // ... existing methods ...
+
+    // NEW: Generic data storage (v2.0.0)
+    get<T>(key: string): Promise<T | null>;
+    set<T>(key: string, value: T, ttl?: number): Promise<void>;
+    delete(key: string): Promise<void>;
+  }
+  ```
+
+  **Migration for custom stores:**
+  If you have a custom store implementation, add these methods:
+
+  ```typescript
+  async get<T>(key: string): Promise<T | null> {
+    const value = await this.client.get(key);
+    return value ? JSON.parse(value) : null;
+  }
+
+  async set<T>(key: string, value: T, ttl?: number): Promise<void> {
+    await this.client.setex(key, ttl || 86400, JSON.stringify(value));
+  }
+
+  async delete(key: string): Promise<void> {
+    await this.client.del(key);
+  }
+  ```
+
+  Built-in stores (MemoryStore, RedisStore, UpstashStore) have been updated automatically.
+
+  ## 📊 Test Coverage
+
+  - **D1 Concurrency:** 10 comprehensive tests
+  - **D2 Priority:** 5 comprehensive tests
+  - **D3 Clustering:** 1 integration test
+  - **D4 Penalty/Reward:** 5 comprehensive tests
+  - **Total:** 21 new tests
+
+  ## 🎯 Use Cases Unlocked
+
+  1. **API Gateways:** Concurrency limits prevent resource exhaustion
+  2. **AI/LLM APIs:** Priority queues + penalties for fair usage
+  3. **Multi-tenant SaaS:** Plan-based priority + clustering
+  4. **Microservices:** Shared limits across distributed services
+  5. **High-traffic APIs:** Reward good behavior, penalize abuse
+
+  ## 📈 Performance
+
+  All features are designed for production use with minimal overhead:
+
+  - Concurrency: O(1) semaphore operations
+  - Priority: O(log n) heap insertion
+  - Clustering: Shared memory (same process) or Redis (multi-process)
+  - Penalty/Reward: O(1) multiplier lookups with TTL
+
+  ## 🔮 Future (v2.1.0+)
+
+  The following features are planned for future releases:
+
+  - **D5:** IPv6 Subnet Limiting
+  - **D6:** Job Scheduling
+
+  ## 📚 Documentation
+
+  Full documentation and examples available at:
+
+  - [Concurrency Limits](../packages/core/README.md#concurrency-limits)
+  - [Priority Queues](../packages/core/README.md#priority-queues)
+  - [Clustering](../packages/core/README.md#clustering)
+  - [Penalty/Reward](../packages/core/README.md#penalty-reward)
+
+### Patch Changes
+
+- Updated dependencies
+  - @limitrate/core@2.0.0
+
+## 1.2.6
+
+### Patch Changes
+
+- Updated dependencies
+  - @limitrate/core@1.7.0
+
+## 1.2.5
+
+### Patch Changes
+
+- Updated dependencies
+  - @limitrate/core@1.6.0
+
+## 1.2.4
+
+### Patch Changes
+
+- Updated dependencies
+  - @limitrate/core@1.5.0
+
+## 1.2.3
+
+### Patch Changes
+
+- Updated dependencies
+  - @limitrate/core@1.4.0
+
 ## 1.2.2
 
 ### Patch Changes

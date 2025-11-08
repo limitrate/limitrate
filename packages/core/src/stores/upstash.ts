@@ -4,7 +4,7 @@
  */
 
 import { Redis } from '@upstash/redis';
-import type { Store, RateCheckResult, CostCheckResult } from '../types';
+import type { Store, RateCheckResult, CostCheckResult, TokenCheckResult } from '../types';
 
 // Same Lua scripts as Redis store
 const RATE_CHECK_SCRIPT = `
@@ -97,6 +97,37 @@ end
 redis.call('SET', key, newCost, 'KEEPTTL')
 local ttl = redis.call('TTL', key)
 return {newCost, true, cap - newCost, ttl, cap}
+`;
+
+// Lua script for atomic token increment (v1.4.0 - AI feature)
+const TOKEN_INCREMENT_SCRIPT = `
+local key = KEYS[1]
+local tokens = tonumber(ARGV[1])
+local window = tonumber(ARGV[2])
+local limit = tonumber(ARGV[3])
+
+local current = redis.call('GET', key)
+
+if not current then
+  if tokens > limit then
+    redis.call('SETEX', key, window, 0)
+    return {0, false, limit, window, limit}
+  end
+  redis.call('SETEX', key, window, tokens)
+  return {tokens, true, limit - tokens, window, limit}
+end
+
+current = tonumber(current)
+local newTokens = current + tokens
+
+if newTokens > limit then
+  local ttl = redis.call('TTL', key)
+  return {current, false, math.max(0, limit - current), ttl, limit}
+end
+
+redis.call('SET', key, newTokens, 'KEEPTTL')
+local ttl = redis.call('TTL', key)
+return {newTokens, true, limit - newTokens, ttl, limit}
 `;
 
 export interface UpstashStoreOptions {
@@ -246,6 +277,36 @@ export class UpstashStore implements Store {
     }
   }
 
+  async incrementTokens(
+    key: string,
+    tokens: number,
+    windowSeconds: number,
+    limit: number
+  ): Promise<TokenCheckResult> {
+    const prefixedKey = `${this.keyPrefix}tokens:${key}`;
+
+    try {
+      const result = (await this.client.eval(
+        TOKEN_INCREMENT_SCRIPT,
+        [prefixedKey],
+        [tokens.toString(), windowSeconds.toString(), limit.toString()]
+      )) as [number, number, number, number, number];
+
+      const [current, allowed, remaining, resetInSeconds, returnedLimit] = result;
+
+      return {
+        allowed: allowed === 1,
+        current,
+        remaining: Math.max(0, remaining),
+        resetInSeconds: Math.max(1, resetInSeconds),
+        limit: returnedLimit,
+      };
+    } catch (error) {
+      console.error('[LimitRate] Upstash token increment error:', error);
+      throw error;
+    }
+  }
+
   async ping(): Promise<boolean> {
     try {
       const result = await this.client.ping();
@@ -258,6 +319,54 @@ export class UpstashStore implements Store {
   async close(): Promise<void> {
     // Upstash HTTP client doesn't need explicit closing
     return Promise.resolve();
+  }
+
+  /**
+   * Generic get method for arbitrary data (v2.0.0 - D4)
+   */
+  async get<T = any>(key: string): Promise<T | null> {
+    try {
+      const prefixedKey = `${this.keyPrefix}generic:${key}`;
+      const value = await this.client.get(prefixedKey);
+
+      if (!value) {
+        return null;
+      }
+
+      // Upstash returns deserialized JSON automatically
+      return value as T;
+    } catch (error) {
+      console.error('[LimitRate] Upstash get error:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Generic set method for arbitrary data (v2.0.0 - D4)
+   */
+  async set<T = any>(key: string, value: T, ttl?: number): Promise<void> {
+    try {
+      const prefixedKey = `${this.keyPrefix}generic:${key}`;
+      const expirySeconds = ttl || 86400; // Default 24h TTL
+
+      await this.client.setex(prefixedKey, expirySeconds, value);
+    } catch (error) {
+      console.error('[LimitRate] Upstash set error:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Generic delete method (v2.0.0 - D4)
+   */
+  async delete(key: string): Promise<void> {
+    try {
+      const prefixedKey = `${this.keyPrefix}generic:${key}`;
+      await this.client.del(prefixedKey);
+    } catch (error) {
+      console.error('[LimitRate] Upstash delete error:', error);
+      throw error;
+    }
   }
 
   /**

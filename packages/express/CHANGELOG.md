@@ -1,5 +1,771 @@
 # @limitrate/express
 
+## 2.2.0
+
+### Minor Changes
+
+- D2: Priority Queues - Higher-priority requests go first in concurrency queue
+
+  This feature allows you to define custom request priorities based on user plan, request attributes, or any custom logic. Lower priority numbers execute first (1 = highest priority, 5 = default).
+
+  Features:
+
+  - Enterprise users can jump ahead of queued free users
+  - Critical operations get priority processing
+  - VIP users get faster response times
+  - Paid plans process before free plans
+  - Maintains FIFO ordering within same priority level
+
+  API:
+
+  ```typescript
+  limitrate({
+    policies,
+    priority: (req) => {
+      // Lower number = higher priority
+      if (req.user?.plan === "enterprise") return 1;
+      if (req.user?.plan === "pro") return 3;
+      return 5; // free
+    },
+  });
+  ```
+
+### Patch Changes
+
+- Updated dependencies
+  - @limitrate/core@2.2.0
+
+## 2.1.0
+
+### Minor Changes
+
+- feat(D5): Add IPv6 subnet limiting to prevent IP rotation bypass
+
+  **IPv6 Subnet Limiting (v2.1.0)**
+
+  Group IPv6 addresses by subnet prefix to prevent users from bypassing rate limits via IP rotation. This is especially useful for preventing distributed attacks from the same network.
+
+  **Features:**
+
+  - Configurable subnet prefixes: `/48`, `/56`, `/64`, `/80`, `/96`, `/112`
+  - IPv4 addresses pass through unchanged
+  - Works across rate limiting, cost limiting, and token limiting
+  - Per-endpoint configuration
+
+  **Usage:**
+
+  ```typescript
+  limitrate({
+    policies: {
+      free: {
+        endpoints: {
+          "GET|/api/endpoint": {
+            rate: { maxPerMinute: 10 },
+            ipv6Subnet: "/64", // Group by /64 subnet
+          },
+        },
+      },
+    },
+  });
+  ```
+
+  **Example:**
+
+  - Without `ipv6Subnet`: `2001:db8::1` and `2001:db8::2` have separate limits
+  - With `ipv6Subnet: '/64'`: Both normalize to `2001:0db8:0000:0000` and share the same limit
+
+  **Implementation:**
+
+  - New utilities: `isIPv6()`, `expandIPv6()`, `getIPv6Subnet()`, `normalizeIP()`
+  - Integrated into PolicyEngine for all limit types
+  - Comprehensive test suite with 5 tests (all passing)
+
+  **Use Cases:**
+
+  - Prevent distributed attacks from same network
+  - Corporate networks behind same subnet
+  - ISP-level rate limiting
+
+- e471d9b: feat: Complete rebrand from FairGate to LimitRate with D5 and D6 features
+
+  This release completes the rebrand from FairGate to LimitRate and adds two new features from Phase D.
+
+  **BREAKING CHANGE:** Complete rebrand from `@fairgate/*` to `@limitrate/*`
+
+  All package names, imports, and documentation have been updated:
+
+  - `@fairgate/core` → `@limitrate/core`
+  - `@fairgate/express` → `@limitrate/express`
+  - `@fairgate/cli` → `@limitrate/cli`
+
+  **Migration Guide:**
+
+  ```bash
+  # Uninstall old packages
+  npm uninstall @fairgate/core @fairgate/express @fairgate/cli
+
+  # Install new packages
+  npm install @limitrate/core @limitrate/express @limitrate/cli
+  ```
+
+  Update imports:
+
+  ```typescript
+  // Before
+  import { limitrate } from "@fairgate/express";
+
+  // After
+  import { limitrate } from "@limitrate/express";
+  ```
+
+  **New Features:**
+
+  **D5: IPv6 Subnet Limiting (v2.1.0)**
+
+  Group IPv6 addresses by subnet prefix to prevent users from bypassing rate limits via IP rotation.
+
+  Features:
+
+  - Configurable subnet prefixes: `/48`, `/56`, `/64`, `/80`, `/96`, `/112`
+  - IPv4 addresses pass through unchanged
+  - Works across rate limiting, cost limiting, and token limiting
+  - Per-endpoint configuration
+
+  Usage:
+
+  ```typescript
+  limitrate({
+    policies: {
+      free: {
+        endpoints: {
+          "GET|/api/endpoint": {
+            rate: { maxPerMinute: 10 },
+            ipv6Subnet: "/64", // Group by /64 subnet
+          },
+        },
+      },
+    },
+  });
+  ```
+
+  Example:
+
+  - Without `ipv6Subnet`: `2001:db8::1` and `2001:db8::2` have separate limits
+  - With `ipv6Subnet: '/64'`: Both normalize to `2001:0db8:0000:0000` and share the same limit
+
+  Implementation:
+
+  - New utilities: `isIPv6()`, `expandIPv6()`, `getIPv6Subnet()`, `normalizeIP()`
+  - Integrated into PolicyEngine for all limit types
+  - Comprehensive test suite with 5 tests (all passing)
+
+  Use Cases:
+
+  - Prevent distributed attacks from same network
+  - Corporate networks behind same subnet
+  - ISP-level rate limiting
+
+  **D6: Job Scheduling (v2.1.0)**
+
+  Schedule rate-limited jobs for future execution with automatic retry logic and concurrency control.
+
+  Features:
+
+  - Polling-based job execution with configurable interval
+  - Concurrency limiting (max simultaneous jobs)
+  - Automatic retry with exponential backoff
+  - Job lifecycle management (pending → running → completed/failed)
+  - Job cancellation support
+  - Store-agnostic (works with any Store implementation)
+
+  Usage:
+
+  ```typescript
+  import { JobScheduler, MemoryStore } from "@limitrate/core";
+
+  const store = new MemoryStore();
+  const scheduler = new JobScheduler(store, {
+    pollInterval: 1000, // Check for jobs every 1s
+    maxConcurrency: 10, // Max 10 concurrent jobs
+    completedJobTTL: 86400, // Keep completed jobs 24h
+  });
+
+  // Register processor
+  scheduler.process(async (job) => {
+    console.log("Processing job:", job.id, job.data);
+    // Your job logic here
+  });
+
+  // Schedule a job
+  await scheduler.schedule({
+    id: "job-123",
+    executeAt: Date.now() + 3600000, // Execute in 1 hour
+    endpoint: "POST|/send-email",
+    user: "user_123",
+    plan: "free",
+    data: { to: "user@example.com", subject: "Hello" },
+    maxRetries: 3, // Retry up to 3 times on failure
+  });
+
+  // Cancel a job
+  await scheduler.cancel("job-123");
+
+  // Get job status
+  const job = await scheduler.getJob("job-123");
+  console.log(job.status); // 'pending' | 'running' | 'completed' | 'failed' | 'cancelled'
+  ```
+
+  Implementation:
+
+  - Created `JobScheduler` class with polling mechanism
+  - Type-safe job definitions with TypeScript generics
+  - Exponential backoff retry strategy (2^retry \* 1000ms)
+  - FIFO job execution ordered by `executeAt` timestamp
+  - Comprehensive test suite with 5 tests (all passing)
+
+  Use Cases:
+
+  - Schedule API calls for later execution
+  - Retry failed operations automatically
+  - Implement delayed job processing
+  - Defer expensive operations to off-peak hours
+
+### Patch Changes
+
+- Updated dependencies
+- Updated dependencies [e471d9b]
+  - @limitrate/core@2.1.0
+
+## 2.0.0
+
+### Major Changes
+
+- # v2.0.0: Phase D - General-Purpose Enhancement
+
+  This major release transforms LimitRate into a comprehensive rate limiting solution with enterprise-grade features.
+
+  ## 🚀 New Features
+
+  ### D1: Concurrency Limits
+
+  Control how many requests can run simultaneously per user/endpoint.
+
+  ```typescript
+  endpoints: {
+    'POST|/api/heavy': {
+      concurrency: {
+        max: 5,                    // Max 5 concurrent requests
+        queueTimeout: 30000,       // 30 second queue timeout
+        actionOnExceed: 'queue'    // Queue or block
+      }
+    }
+  }
+  ```
+
+  **Key capabilities:**
+
+  - Semaphore-style concurrency control
+  - Queue mode: Wait for slot to become available
+  - Block mode: Reject immediately when limit reached
+  - Per-user AND per-endpoint limiting
+  - Configurable queue timeouts
+
+  ### D2: Priority Queues
+
+  Process high-priority requests first when using concurrency queues.
+
+  ```typescript
+  app.use(
+    limitrate({
+      // ...config
+      priority: (req) => {
+        // Lower number = higher priority
+        if (req.headers["x-plan"] === "enterprise") return 1;
+        if (req.headers["x-plan"] === "pro") return 3;
+        return 5; // free tier
+      },
+    })
+  );
+  ```
+
+  **Key capabilities:**
+
+  - Priority-based request ordering
+  - FIFO within same priority level
+  - Integrates with concurrency limiting
+  - Plan-based or custom priority functions
+
+  ### D3: Clustering Support
+
+  Share rate limits across multiple Node.js processes/servers.
+
+  ```typescript
+  import { createSharedMemoryStore } from '@limitrate/express';
+
+  // Create ONE shared store instance
+  const sharedStore = createSharedMemoryStore();
+
+  // Use same instance across all servers
+  app1.use(limitrate({ store: sharedStore, ... }));
+  app2.use(limitrate({ store: sharedStore, ... }));
+  app3.use(limitrate({ store: sharedStore, ... }));
+  ```
+
+  **Production clustering:**
+
+  ```typescript
+  // Use Redis for true multi-process clustering
+  import { createSharedRedisStore } from "@limitrate/express";
+
+  const store = createSharedRedisStore({
+    url: process.env.REDIS_URL,
+  });
+  ```
+
+  ### D4: Penalty/Reward System
+
+  Dynamically adjust rate limits based on user behavior.
+
+  ```typescript
+  endpoints: {
+    'GET|/api/data': {
+      rate: {
+        maxPerMinute: 100,
+        actionOnExceed: 'block',
+      },
+      penalty: {
+        enabled: true,
+        onViolation: {
+          duration: 300,       // 5 minute penalty
+          multiplier: 0.5      // Reduce to 50% (50 req/min)
+        },
+        rewards: {
+          duration: 300,
+          multiplier: 1.5,     // Increase to 150% (150 req/min)
+          trigger: 'below_25_percent'  // Reward light usage
+        }
+      }
+    }
+  }
+  ```
+
+  **Key capabilities:**
+
+  - Automatic penalty on violations (reduces limits)
+  - Automatic rewards for low usage (increases limits)
+  - Configurable duration (TTL)
+  - Configurable multipliers
+  - Trigger thresholds for rewards (10%, 25%, 50%)
+
+  ## 🔧 Breaking Changes
+
+  ### Store Interface Extension
+
+  All custom store implementations must now implement three additional methods:
+
+  ```typescript
+  interface Store {
+    // ... existing methods ...
+
+    // NEW: Generic data storage (v2.0.0)
+    get<T>(key: string): Promise<T | null>;
+    set<T>(key: string, value: T, ttl?: number): Promise<void>;
+    delete(key: string): Promise<void>;
+  }
+  ```
+
+  **Migration for custom stores:**
+  If you have a custom store implementation, add these methods:
+
+  ```typescript
+  async get<T>(key: string): Promise<T | null> {
+    const value = await this.client.get(key);
+    return value ? JSON.parse(value) : null;
+  }
+
+  async set<T>(key: string, value: T, ttl?: number): Promise<void> {
+    await this.client.setex(key, ttl || 86400, JSON.stringify(value));
+  }
+
+  async delete(key: string): Promise<void> {
+    await this.client.del(key);
+  }
+  ```
+
+  Built-in stores (MemoryStore, RedisStore, UpstashStore) have been updated automatically.
+
+  ## 📊 Test Coverage
+
+  - **D1 Concurrency:** 10 comprehensive tests
+  - **D2 Priority:** 5 comprehensive tests
+  - **D3 Clustering:** 1 integration test
+  - **D4 Penalty/Reward:** 5 comprehensive tests
+  - **Total:** 21 new tests
+
+  ## 🎯 Use Cases Unlocked
+
+  1. **API Gateways:** Concurrency limits prevent resource exhaustion
+  2. **AI/LLM APIs:** Priority queues + penalties for fair usage
+  3. **Multi-tenant SaaS:** Plan-based priority + clustering
+  4. **Microservices:** Shared limits across distributed services
+  5. **High-traffic APIs:** Reward good behavior, penalize abuse
+
+  ## 📈 Performance
+
+  All features are designed for production use with minimal overhead:
+
+  - Concurrency: O(1) semaphore operations
+  - Priority: O(log n) heap insertion
+  - Clustering: Shared memory (same process) or Redis (multi-process)
+  - Penalty/Reward: O(1) multiplier lookups with TTL
+
+  ## 🔮 Future (v2.1.0+)
+
+  The following features are planned for future releases:
+
+  - **D5:** IPv6 Subnet Limiting
+  - **D6:** Job Scheduling
+
+  ## 📚 Documentation
+
+  Full documentation and examples available at:
+
+  - [Concurrency Limits](../packages/core/README.md#concurrency-limits)
+  - [Priority Queues](../packages/core/README.md#priority-queues)
+  - [Clustering](../packages/core/README.md#clustering)
+  - [Penalty/Reward](../packages/core/README.md#penalty-reward)
+
+### Patch Changes
+
+- Updated dependencies
+  - @limitrate/core@2.0.0
+
+## 1.4.3
+
+### Patch Changes
+
+- Updated dependencies
+  - @limitrate/core@1.7.0
+
+## 1.4.2
+
+### Patch Changes
+
+- Updated dependencies
+  - @limitrate/core@1.6.0
+
+## 1.4.1
+
+### Patch Changes
+
+- # Official Tokenizer Integration (v1.5.0 - Phase C2)
+
+  Add support for official tokenizers from OpenAI (tiktoken) and Anthropic for accurate token counting.
+
+  ## Features
+
+  - **OpenAI Tokenizer Integration**: Support for GPT models using tiktoken
+  - **Anthropic Tokenizer Integration**: Support for Claude models using @anthropic-ai/sdk
+  - **Custom Tokenizers**: Users can provide their own tokenizer functions
+  - **Fallback Tokenizer**: Automatic fallback to length/4 approximation if tokenizers not installed
+  - **Tokenizer Caching**: Tokenizer instances are cached for better performance
+  - **Zero Breaking Changes**: All tokenizers are optional peer dependencies
+
+  ## Usage
+
+  ### Basic Usage (Fallback Tokenizer)
+
+  Works out of the box without any additional dependencies:
+
+  ```typescript
+  import { createTokenizer } from "@limitrate/core";
+
+  const tokenizer = await createTokenizer("gpt-4");
+  const count = await tokenizer.count("Hello world");
+  // Uses fallback: length/4 approximation
+  ```
+
+  ### With OpenAI Tokenizer (tiktoken)
+
+  For accurate OpenAI token counts:
+
+  ```bash
+  npm install tiktoken
+  ```
+
+  ```typescript
+  import { createTokenizer } from "@limitrate/core";
+
+  const tokenizer = await createTokenizer("gpt-4");
+  const count = await tokenizer.count("Hello world");
+  // Uses tiktoken for precise counting
+  ```
+
+  ### With Anthropic Tokenizer
+
+  For accurate Claude token counts:
+
+  ```bash
+  npm install @anthropic-ai/sdk
+  ```
+
+  ```typescript
+  import { createTokenizer } from "@limitrate/core";
+
+  const tokenizer = await createTokenizer("claude-3-opus");
+  const count = await tokenizer.count("Hello world");
+  // Uses Anthropic SDK for precise counting
+  ```
+
+  ### Custom Tokenizer Function
+
+  ```typescript
+  import { createTokenizer } from "@limitrate/core";
+
+  // Word-based tokenizer
+  const tokenizer = await createTokenizer((text) => {
+    return text.split(/\s+/).length;
+  });
+
+  const count = await tokenizer.count("Hello world");
+  // Returns: 2 (word count)
+  ```
+
+  ### Integration with Cost Estimation
+
+  ```typescript
+  import { limitrate, createTokenizer } from "@limitrate/express";
+
+  // Create tokenizers once (cached)
+  const gpt4Tokenizer = await createTokenizer("gpt-4");
+  const claudeTokenizer = await createTokenizer("claude-3-opus");
+
+  app.use(
+    limitrate({
+      store,
+      identifyUser: (req) => req.headers["x-user-id"],
+      identifyPlan: (req) => req.headers["x-user-plan"] || "free",
+      policies: {
+        free: {
+          endpoints: {
+            "POST|/api/chat": {
+              cost: {
+                estimateCost: async (req) => {
+                  const model = req.body.model || "gpt-4";
+                  const messages = req.body.messages;
+
+                  // Extract text from messages
+                  const text = messages.map((m) => m.content).join("\n");
+
+                  // Count tokens accurately
+                  const tokenizer = model.startsWith("claude")
+                    ? claudeTokenizer
+                    : gpt4Tokenizer;
+
+                  const tokens = await tokenizer.count(text);
+
+                  // Calculate cost
+                  const pricing = {
+                    "gpt-4": 0.03 / 1000,
+                    "claude-3-opus": 0.015 / 1000,
+                  };
+
+                  return tokens * (pricing[model] || 0.001);
+                },
+                hourlyCap: 1.0,
+                actionOnExceed: "block",
+              },
+            },
+          },
+        },
+      },
+    })
+  );
+  ```
+
+  ## API
+
+  ### `createTokenizer(modelOrFunction, options?)`
+
+  Creates a tokenizer for the specified model or using a custom function.
+
+  **Parameters:**
+
+  - `modelOrFunction`: Model name (string) or custom tokenizer function
+  - `options.warnOnFallback`: Whether to warn when using fallback (default: true)
+
+  **Returns:** `Promise<Tokenizer>`
+
+  **Supported Models:**
+
+  - OpenAI: `gpt-3.5-turbo`, `gpt-4`, `gpt-4-turbo`, `gpt-4o`, `gpt-4o-mini`
+  - Anthropic: `claude-3-opus`, `claude-3-sonnet`, `claude-3-haiku`, `claude-3-5-sonnet`
+
+  ### `Tokenizer` Interface
+
+  ```typescript
+  interface Tokenizer {
+    count(text: string | string[]): Promise<number>;
+    model: string;
+    isFallback: boolean;
+  }
+  ```
+
+  ### `clearTokenizerCache()`
+
+  Clears the tokenizer cache (useful for testing or reinitializing tokenizers).
+
+  ## Migration Guide
+
+  ### No Changes Required
+
+  All tokenizers are optional. Existing code continues to work without any modifications.
+
+  ### To Enable Accurate Token Counting
+
+  1. **For OpenAI models:**
+
+     ```bash
+     npm install tiktoken
+     ```
+
+  2. **For Anthropic models:**
+
+     ```bash
+     npm install @anthropic-ai/sdk
+     ```
+
+  3. **Use in your code:**
+
+     ```typescript
+     import { createTokenizer } from "@limitrate/core";
+
+     const tokenizer = await createTokenizer("gpt-4");
+     const tokens = await tokenizer.count(text);
+     ```
+
+  ## Notes
+
+  - **Performance**: Tokenizers are cached automatically for better performance
+  - **Bundle Size**: No impact on bundle size if tokenizers are not installed
+  - **Graceful Degradation**: Automatically falls back to length/4 if tokenizers unavailable
+  - **Type Safety**: Full TypeScript support with type definitions
+
+  ## Why This Matters
+
+  **Before:** Token estimation using `text.length / 4` was inaccurate by 20-30%
+
+  **After:** Precise token counting using official tokenizers, ensuring:
+
+  - Accurate cost estimation
+  - Better rate limiting for AI applications
+  - Fewer surprises in API billing
+  - Prevention of wasted API calls due to bad estimates
+
+  ***
+
+  **Tested with:**
+
+  - ✅ Fallback tokenizer (no dependencies)
+  - ✅ OpenAI tokenizer (tiktoken)
+  - ✅ Anthropic tokenizer (@anthropic-ai/sdk)
+  - ✅ Custom tokenizer functions
+  - ✅ Array input support
+  - ✅ Tokenizer caching
+  - ✅ Multiple model support
+  - ✅ Large text handling
+
+  **Phase C2 Complete!** 🎉
+
+- Updated dependencies
+  - @limitrate/core@1.5.0
+
+## 1.4.0
+
+### Minor Changes
+
+- # Token-Based Rate Limiting for AI Applications (v1.4.0 - Phase C1)
+
+  Add token-based rate limiting to enable precise control over AI API usage. Instead of limiting only request counts, you can now limit by token consumption - critical for cost control in AI applications.
+
+  ## New Features
+
+  ### Core (`@limitrate/core`)
+
+  - **Token Limit Configuration**: Add `maxTokensPerMinute`, `maxTokensPerHour`, `maxTokensPerDay` to rate rules
+  - **Token Tracking**: New `incrementTokens()` method in all stores (Memory, Redis, Upstash)
+  - **Atomic Operations**: Lua scripts for Redis/Upstash ensure atomic token tracking
+  - **Token Events**: Emit `token_limit_exceeded` and `token_usage_tracked` events
+
+  ### Express (`@limitrate/express`)
+
+  - **Token Extraction**: New `identifyTokenUsage` callback to extract token counts from requests
+  - **Token-Aware Middleware**: Automatically tracks and enforces token limits
+  - **Enhanced 429 Responses**: Token-specific error messages with clear limit information
+  - **Type Safety**: Full TypeScript support for token-based rate limiting
+
+  ## Example Usage
+
+  ```typescript
+  import { limitrate, createSharedMemoryStore } from "@limitrate/express";
+
+  app.use(
+    limitrate({
+      store: createSharedMemoryStore(),
+      identifyUser: (req) => req.headers["x-user-id"],
+      identifyPlan: (req) => req.user?.plan || "free",
+      identifyTokenUsage: (req) => {
+        // Extract token count from request
+        return req.body.tokens || 0;
+      },
+      policies: {
+        free: {
+          endpoints: {
+            "POST|/api/chat": {
+              rate: {
+                maxPerMinute: 10, // Request limit
+                maxTokensPerMinute: 50000, // Token limit per minute
+                maxTokensPerHour: 500000, // Token limit per hour
+                maxTokensPerDay: 5000000, // Token limit per day
+                actionOnExceed: "block",
+              },
+            },
+          },
+        },
+      },
+    })
+  );
+  ```
+
+  ## Breaking Changes
+
+  None - this is a purely additive feature.
+
+  ## Migration Guide
+
+  No migration needed. Existing rate limiting configurations continue to work unchanged. Token limits are opt-in via the `identifyTokenUsage` callback and `maxTokens*` configuration.
+
+  ##Performance
+
+  - Minimal overhead: Token tracking uses the same atomic operations as existing rate limiting
+  - Redis/Upstash: Single Lua script execution per request
+  - Memory store: O(1) lookups and updates
+
+  ## Testing
+
+  Comprehensive test suite added in `test-token-based-limits.js`:
+
+  - ✅ Token limit per minute enforcement
+  - ✅ Multiple time windows (minute, hour, day)
+  - ✅ Combined request + token limits
+  - ✅ Token-specific 429 responses
+  - ✅ All scenarios passing
+
+### Patch Changes
+
+- Updated dependencies
+  - @limitrate/core@1.4.0
+
 ## 1.3.1
 
 ### Patch Changes

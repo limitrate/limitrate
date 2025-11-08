@@ -16,6 +16,7 @@ export type {
   EnforcementAction,
   RateRule,
   CostRule,
+  ConcurrencyConfig,
   EndpointPolicy,
   PolicyConfig,
   StoreConfig,
@@ -33,3 +34,6 @@ export {
 // Re-export endpoint tracking for convenience (v1.4.0 - B2)
 export { getGlobalEndpointTracker, setGlobalEndpointTracker, EndpointTracker } from '@limitrate/core';
 export type { EndpointStats, EndpointTrackerOptions } from '@limitrate/core';
+
+// Re-export concurrency limiter for convenience (v2.0.0 - D1)
+export { getConcurrencyLimiter, clearAllLimiters, ConcurrencyLimiter } from '@limitrate/core';

@@ -34,10 +34,15 @@ coverage/
 
 # LimitRate specific
 .limitrate/
+.fairgate/
 
 # Temporary
 tmp/
 temp/
+CURRENT-SESSION-MEMO.md
 
 # Benchmark results (too large for GitHub)
 tools/benchmarks/results/*.json
+
+# Archive (historical docs)
+archive/

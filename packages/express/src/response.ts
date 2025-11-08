@@ -7,7 +7,7 @@ import type { PlanName } from '@limitrate/core';
 import type { BlockedResponse } from './types';
 
 export interface ResponseOptions {
-  reason: 'rate_limited' | 'cost_exceeded' | 'ip_blocked';
+  reason: 'rate_limited' | 'cost_exceeded' | 'token_limit_exceeded' | 'ip_blocked';
   plan: PlanName;
   endpoint: string;
   used: number;
@@ -57,6 +57,11 @@ export function send429Response(res: Response, options: ResponseOptions): void {
   } else if (reason === 'cost_exceeded') {
     const [method, path] = endpoint.split('|');
     message = `${capitalize(plan)} plan allows $${allowed.toFixed(2)}/day on ${method} ${path}. You've used $${used.toFixed(2)}.`;
+  } else if (reason === 'token_limit_exceeded') {
+    const [method, path] = endpoint.split('|');
+    const formattedUsed = used.toLocaleString();
+    const formattedAllowed = allowed.toLocaleString();
+    message = `${capitalize(plan)} plan allows ${formattedAllowed} tokens/min on ${method} ${path}. You've used ${formattedUsed}. Please wait ${retryAfterSeconds} seconds.`;
   } else {
     message = 'Your IP address has been blocked.';
   }

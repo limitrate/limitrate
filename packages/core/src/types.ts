@@ -4,6 +4,12 @@
 
 export type PlanName = 'free' | 'pro' | 'enterprise' | string;
 
+/**
+ * IPv6 subnet prefix lengths (v2.1.0 - D5)
+ * Used to group IPv6 addresses by subnet to prevent IP rotation bypass
+ */
+export type IPv6SubnetPrefix = '/48' | '/56' | '/64' | '/80' | '/96' | '/112';
+
 export type EnforcementAction = 'allow' | 'block' | 'slowdown' | 'allow-and-log';
 
 export interface RateRule {
@@ -17,6 +23,12 @@ export interface RateRule {
   maxPerDay?: number;
   /** Burst allowance (extra tokens beyond steady rate) */
   burst?: number;
+  /** Maximum tokens per minute (AI feature - v1.4.0) */
+  maxTokensPerMinute?: number;
+  /** Maximum tokens per hour (AI feature - v1.4.0) */
+  maxTokensPerHour?: number;
+  /** Maximum tokens per day (AI feature - v1.4.0) */
+  maxTokensPerDay?: number;
   /** Action to take when limit exceeded */
   actionOnExceed: EnforcementAction;
   /** Delay in milliseconds if action is 'slowdown' */
@@ -34,11 +46,54 @@ export interface CostRule {
   actionOnExceed: EnforcementAction;
 }
 
+/**
+ * Concurrency configuration (v2.0.0 - D1)
+ * Controls how many requests can run simultaneously
+ */
+export interface ConcurrencyConfig {
+  /** Maximum concurrent requests */
+  max: number;
+  /** Max wait time in queue (ms), default 30000 */
+  queueTimeout?: number;
+  /** What to do when limit exceeded: 'queue' (wait) or 'block' (reject immediately) */
+  actionOnExceed?: 'queue' | 'block';
+}
+
+/**
+ * Penalty/Reward configuration (v2.0.0 - D4)
+ */
+export interface PenaltyConfig {
+  /** Enable penalty/reward system */
+  enabled?: boolean;
+  /** Penalty on rate limit violation */
+  onViolation?: {
+    /** Duration in seconds */
+    duration: number;
+    /** Multiplier for limit (0.5 = reduce to 50%) */
+    multiplier: number;
+  };
+  /** Reward for low usage */
+  rewards?: {
+    /** Duration in seconds */
+    duration: number;
+    /** Multiplier for limit (1.5 = increase to 150%) */
+    multiplier: number;
+    /** Trigger condition */
+    trigger: 'below_50_percent' | 'below_25_percent' | 'below_10_percent';
+  };
+}
+
 export interface EndpointPolicy {
   /** Rate limiting rule */
   rate?: RateRule;
   /** Cost limiting rule */
   cost?: CostRule;
+  /** Concurrency limiting rule (v2.0.0 - D1) */
+  concurrency?: ConcurrencyConfig;
+  /** Penalty/Reward configuration (v2.0.0 - D4) */
+  penalty?: PenaltyConfig;
+  /** IPv6 subnet grouping (v2.1.0 - D5) - group IPv6 addresses by subnet to prevent IP rotation bypass */
+  ipv6Subnet?: IPv6SubnetPrefix;
 }
 
 export type PolicyConfig = Record<
@@ -114,6 +169,19 @@ export interface CostCheckResult {
   cap: number;
 }
 
+export interface TokenCheckResult {
+  /** Whether request is allowed based on token limit */
+  allowed: boolean;
+  /** Current token usage */
+  current: number;
+  /** Remaining tokens in window */
+  remaining: number;
+  /** Seconds until window resets */
+  resetInSeconds: number;
+  /** Token limit that was checked against */
+  limit: number;
+}
+
 export interface LimitRateEvent {
   /** Event timestamp (Unix milliseconds) */
   timestamp: number;
@@ -124,13 +192,15 @@ export interface LimitRateEvent {
   /** Endpoint (METHOD|/path) */
   endpoint: string;
   /** Event type */
-  type: 'rate_exceeded' | 'cost_exceeded' | 'slowdown_applied' | 'allowed' | 'blocked';
+  type: 'rate_exceeded' | 'cost_exceeded' | 'token_limit_exceeded' | 'token_usage_tracked' | 'slowdown_applied' | 'allowed' | 'blocked';
   /** Time window (e.g., "1m", "1h", "1d") */
   window?: string;
-  /** Current value (count or cost) */
+  /** Current value (count, cost, or tokens) */
   value?: number;
   /** Threshold that was checked */
   threshold?: number;
+  /** Token count (for token events - v1.4.0) */
+  tokens?: number;
 }
 
 export interface Store {
@@ -170,6 +240,21 @@ export interface Store {
   ): Promise<CostCheckResult>;
 
   /**
+   * Increment token usage for a key (v1.4.0 - AI feature)
+   * @param key - Unique identifier (e.g., "user_123:POST|/api:tokens")
+   * @param tokens - Number of tokens to add
+   * @param windowSeconds - Time window in seconds
+   * @param limit - Maximum tokens allowed in window
+   * @returns Token check result
+   */
+  incrementTokens(
+    key: string,
+    tokens: number,
+    windowSeconds: number,
+    limit: number
+  ): Promise<TokenCheckResult>;
+
+  /**
    * Health check
    * @returns Whether store is healthy
    */
@@ -179,4 +264,21 @@ export interface Store {
    * Close connections
    */
   close(): Promise<void>;
+
+  /**
+   * Generic get method for arbitrary data (v2.0.0 - D4)
+   * Used by penalty/reward system and other features
+   */
+  get<T = any>(key: string): Promise<T | null>;
+
+  /**
+   * Generic set method for arbitrary data (v2.0.0 - D4)
+   * @param ttl - Time to live in seconds (optional)
+   */
+  set<T = any>(key: string, value: T, ttl?: number): Promise<void>;
+
+  /**
+   * Generic delete method (v2.0.0 - D4)
+   */
+  delete(key: string): Promise<void>;
 }

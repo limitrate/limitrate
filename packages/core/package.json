@@ -1,6 +1,6 @@
 {
   "name": "@limitrate/core",
-  "version": "3.0.1",
+  "version": "3.1.0",
   "description": "Core rate limiting and cost control engine for LimitRate",
   "main": "./dist/index.js",
   "module": "./dist/index.mjs",

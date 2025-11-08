@@ -82,3 +82,18 @@ export {
 // Logger (v3.1.2)
 export type { Logger } from './logger';
 export { setLogger, getLogger, createSilentLogger, createConsoleLogger, logger } from './logger';
+
+// Framework-Agnostic Rate Limiter (v3.2.0)
+export { RateLimiter } from './limiter';
+export type {
+  RateLimitRequest,
+  RateLimitResult,
+  RateLimiterConfig,
+} from './limiter';
+
+// Framework Adapters (v3.2.0)
+export { createAdapterOptions } from './adapter';
+export type {
+  FrameworkAdapter,
+  AdapterOptions,
+} from './adapter';

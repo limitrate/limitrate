@@ -6,6 +6,10 @@
 export { limitrate, withPolicy } from './middleware';
 export type { LimitRateOptions, BlockedResponse, DryRunEvent } from './types';
 
+// New framework-agnostic middleware (v3.2.0)
+export { limitrateV2 } from './middleware-v2';
+export { ExpressAdapter } from './adapters/express';
+
 // Client-side SDK helpers (v1.7.0 - B5)
 export { getRateLimitStatus, createStatusEndpoint } from './status';
 export type { RateLimitStatus } from './status';

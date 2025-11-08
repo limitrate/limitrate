@@ -120,8 +120,8 @@ importers:
         specifier: ^0.6.3
         version: 0.6.5
       commander:
-        specifier: ^11.1.0
-        version: 11.1.0
+        specifier: ^14.0.2
+        version: 14.0.2
     devDependencies:
       '@types/better-sqlite3':
         specifier: ^7.6.8
@@ -2408,9 +2408,9 @@ packages:
     dependencies:
       delayed-stream: 1.0.0
 
-  /commander@11.1.0:
-    resolution: {integrity: sha512-yPVavfyCcRhmorC7rWlkHn15b4wDVgVmBA7kV4QVBsF7kv/9TKJAbAXVTxvTnwP8HHKjRCJDClKbciiYS7p0DQ==}
-    engines: {node: '>=16'}
+  /commander@14.0.2:
+    resolution: {integrity: sha512-TywoWNNRbhoD0BXs1P3ZEScW8W5iKrnbithIl0YH+uCmBd0QpPOA8yc82DS3BIE5Ma6FnBVUsJ7wVUDz4dvOWQ==}
+    engines: {node: '>=20'}
     dev: false
 
   /commander@4.1.1:

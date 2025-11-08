@@ -364,58 +364,6 @@ export class RedisStore implements Store {
   }
 
   /**
-   * Generic get method for arbitrary data (v2.0.0 - D4)
-   */
-  async get<T = any>(key: string): Promise<T | null> {
-    try {
-      const prefixedKey = `${this.keyPrefix}generic:${key}`;
-      const value = await this.client.get(prefixedKey);
-
-      if (!value) {
-        return null;
-      }
-
-      return JSON.parse(value) as T;
-    } catch (error) {
-      console.error('[LimitRate] Redis get error:', error);
-      throw error;
-    }
-  }
-
-  /**
-   * Generic set method for arbitrary data (v2.0.0 - D4)
-   */
-  async set<T = any>(key: string, value: T, ttl?: number): Promise<void> {
-    try {
-      const prefixedKey = `${this.keyPrefix}generic:${key}`;
-      const serialized = JSON.stringify(value);
-
-      if (ttl) {
-        await this.client.setex(prefixedKey, ttl, serialized);
-      } else {
-        // Default 24h TTL
-        await this.client.setex(prefixedKey, 86400, serialized);
-      }
-    } catch (error) {
-      console.error('[LimitRate] Redis set error:', error);
-      throw error;
-    }
-  }
-
-  /**
-   * Generic delete method (v2.0.0 - D4)
-   */
-  async delete(key: string): Promise<void> {
-    try {
-      const prefixedKey = `${this.keyPrefix}generic:${key}`;
-      await this.client.del(prefixedKey);
-    } catch (error) {
-      console.error('[LimitRate] Redis delete error:', error);
-      throw error;
-    }
-  }
-
-  /**
    * Get underlying Redis client (for advanced use cases)
    */
   getClient(): Redis {

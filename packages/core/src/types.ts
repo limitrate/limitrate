@@ -230,21 +230,4 @@ export interface Store {
    * Close connections
    */
   close(): Promise<void>;
-
-  /**
-   * Generic get method for arbitrary data (v2.0.0 - D4)
-   * Used by penalty/reward system and other features
-   */
-  get<T = any>(key: string): Promise<T | null>;
-
-  /**
-   * Generic set method for arbitrary data (v2.0.0 - D4)
-   * @param ttl - Time to live in seconds (optional)
-   */
-  set<T = any>(key: string, value: T, ttl?: number): Promise<void>;
-
-  /**
-   * Generic delete method (v2.0.0 - D4)
-   */
-  delete(key: string): Promise<void>;
 }

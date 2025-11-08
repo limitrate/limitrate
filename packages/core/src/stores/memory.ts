@@ -11,18 +11,8 @@ interface CacheEntry {
   burstTokens?: number;
 }
 
-interface GenericEntry<T> {
-  value: T;
-  expiresAt: number;
-}
-
-// Type guard to check if entry is CacheEntry
-function isCacheEntry(entry: CacheEntry | GenericEntry<any>): entry is CacheEntry {
-  return 'count' in entry;
-}
-
 export class MemoryStore implements Store {
-  private cache: Map<string, CacheEntry | GenericEntry<any>>;
+  private cache: Map<string, CacheEntry>;
   private readonly maxKeys: number;
   private cleanupInterval: NodeJS.Timeout | null;
 
@@ -39,25 +29,6 @@ export class MemoryStore implements Store {
   async checkRate(key: string, limit: number, windowSeconds: number, burst?: number): Promise<RateCheckResult> {
     const now = Date.now();
     const entry = this.cache.get(key);
-
-    // Type guard: ensure we're working with CacheEntry
-    if (entry && !isCacheEntry(entry)) {
-      // This is a GenericEntry, not a CacheEntry - treat as no entry
-      const expiresAt = now + windowSeconds * 1000;
-      const burstTokens = burst;
-      const cacheEntry: CacheEntry = { count: 1, expiresAt, burstTokens };
-      this.cache.set(key, cacheEntry);
-      this.evictIfNeeded();
-
-      return {
-        allowed: true,
-        current: 1,
-        remaining: limit - 1,
-        resetInSeconds: windowSeconds,
-        limit,
-        burstTokens,
-      };
-    }
 
     // No entry or expired → allow and create new
     if (!entry || entry.expiresAt <= now) {
@@ -124,18 +95,6 @@ export class MemoryStore implements Store {
     const now = Date.now();
     const entry = this.cache.get(key);
 
-    // Type guard: ensure we're working with CacheEntry
-    if (entry && !isCacheEntry(entry)) {
-      // This is a GenericEntry, not a CacheEntry - treat as no entry
-      return {
-        allowed: true,
-        current: 0,
-        remaining: limit,
-        resetInSeconds: windowSeconds,
-        limit,
-      };
-    }
-
     // No entry or expired → would be allowed
     if (!entry || entry.expiresAt <= now) {
       return {
@@ -170,23 +129,6 @@ export class MemoryStore implements Store {
   ): Promise<CostCheckResult> {
     const now = Date.now();
     const entry = this.cache.get(key);
-
-    // Type guard: ensure we're working with CacheEntry
-    if (entry && !isCacheEntry(entry)) {
-      // This is a GenericEntry, not a CacheEntry - treat as no entry
-      const expiresAt = now + windowSeconds * 1000;
-      const cacheEntry: CacheEntry = { count: cost, expiresAt };
-      this.cache.set(key, cacheEntry);
-      this.evictIfNeeded();
-
-      return {
-        allowed: cost <= cap,
-        current: cost,
-        remaining: cap - cost,
-        resetInSeconds: windowSeconds,
-        cap,
-      };
-    }
 
     // No entry or expired → allow and create new
     if (!entry || entry.expiresAt <= now) {
@@ -238,23 +180,6 @@ export class MemoryStore implements Store {
   ): Promise<TokenCheckResult> {
     const now = Date.now();
     const entry = this.cache.get(key);
-
-    // Type guard: ensure we're working with CacheEntry
-    if (entry && !isCacheEntry(entry)) {
-      // This is a GenericEntry, not a CacheEntry - treat as no entry
-      const expiresAt = now + windowSeconds * 1000;
-      const cacheEntry: CacheEntry = { count: tokens, expiresAt };
-      this.cache.set(key, cacheEntry);
-      this.evictIfNeeded();
-
-      return {
-        allowed: tokens <= limit,
-        current: tokens,
-        remaining: Math.max(0, limit - tokens),
-        resetInSeconds: windowSeconds,
-        limit,
-      };
-    }
 
     // No entry or expired → allow and create new
     if (!entry || entry.expiresAt <= now) {
@@ -333,57 +258,6 @@ export class MemoryStore implements Store {
         this.cache.delete(firstKey);
       }
     }
-  }
-
-  /**
-   * Generic get method for arbitrary data (v2.0.0 - D4)
-   */
-  async get<T = any>(key: string): Promise<T | null> {
-    const now = Date.now();
-    const entry = this.cache.get(key);
-
-    if (!entry) {
-      return null;
-    }
-
-    // Check if it's a GenericEntry (has 'value' property)
-    if ('value' in entry) {
-      const genericEntry = entry as GenericEntry<T>;
-
-      // Check if expired
-      if (genericEntry.expiresAt <= now) {
-        this.cache.delete(key);
-        return null;
-      }
-
-      return genericEntry.value;
-    }
-
-    // Not a generic entry, return null
-    return null;
-  }
-
-  /**
-   * Generic set method for arbitrary data (v2.0.0 - D4)
-   */
-  async set<T = any>(key: string, value: T, ttl?: number): Promise<void> {
-    const now = Date.now();
-    const expiresAt = ttl ? now + ttl * 1000 : now + 86400 * 1000; // Default 24h TTL
-
-    const entry: GenericEntry<T> = {
-      value,
-      expiresAt,
-    };
-
-    this.cache.set(key, entry);
-    this.evictIfNeeded();
-  }
-
-  /**
-   * Generic delete method (v2.0.0 - D4)
-   */
-  async delete(key: string): Promise<void> {
-    this.cache.delete(key);
   }
 
   /**

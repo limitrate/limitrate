@@ -38,6 +38,8 @@ export interface CostRule {
   dailyCap?: number;
   /** Action to take when cost cap exceeded */
   actionOnExceed: EnforcementAction;
+  /** Timeout for estimateCost execution in milliseconds (default: 5000ms) - Fix #4 */
+  costEstimationTimeoutMs?: number;
 }
 
 /**
@@ -49,8 +51,12 @@ export interface ConcurrencyConfig {
   max: number;
   /** Max wait time in queue (ms), default 30000 */
   queueTimeout?: number;
+  /** Maximum queued requests (prevents memory exhaustion), default 1000 */
+  maxQueueSize?: number;
   /** What to do when limit exceeded: 'queue' (wait) or 'block' (reject immediately) */
   actionOnExceed?: 'queue' | 'block';
+  /** Priority aging interval in seconds (default: 5) - Fix #7 */
+  priorityAgingSeconds?: number;
 }
 
 export interface EndpointPolicy {
@@ -105,6 +111,16 @@ export interface StoreConfig {
   token?: string;
   /** Redis client options */
   options?: any;
+  /** Max keys in memory store (default: 10000) - Fix #7 */
+  maxKeys?: number;
+  /** Cleanup interval for memory store in ms (default: 60000) - Fix #7 */
+  cleanupIntervalMs?: number;
+  /** Max keys per user in memory store (default: 100) - Fix #7 */
+  maxKeysPerUser?: number;
+  /** Circuit breaker failure threshold for redis/upstash (default: 5) - Fix #7 */
+  circuitBreakerThreshold?: number;
+  /** Circuit breaker timeout in ms for redis/upstash (default: 30000) - Fix #7 */
+  circuitBreakerTimeoutMs?: number;
 }
 
 export interface RateCheckResult {

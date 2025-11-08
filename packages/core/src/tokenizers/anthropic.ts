@@ -4,6 +4,7 @@
  */
 
 import type { Tokenizer } from './index.js';
+import { logger } from '../logger';
 
 /**
  * Create Anthropic tokenizer using @anthropic-ai/sdk
@@ -16,7 +17,7 @@ import type { Tokenizer } from './index.js';
  * ```typescript
  * const tokenizer = await createAnthropicTokenizer('claude-3-opus');
  * const count = await tokenizer.count('Hello world');
- * console.log(`Tokens: ${count}`);
+ * logger.info(`Tokens: ${count}`);
  * ```
  */
 export async function createAnthropicTokenizer(model: string): Promise<Tokenizer> {
@@ -59,7 +60,7 @@ export async function createAnthropicTokenizer(model: string): Promise<Tokenizer
       } catch (error: any) {
         // If API call fails (e.g., no internet, invalid model), fall back to estimation
         if (error.message?.includes('Could not resolve')) {
-          console.warn(`[LimitRate] Anthropic token counting failed (${error.message}), using fallback`);
+          logger.warn(`[LimitRate] Anthropic token counting failed (${error.message}), using fallback`);
           return Math.ceil(combined.length / 4);
         }
         throw error;

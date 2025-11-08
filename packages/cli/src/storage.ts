@@ -1,5 +1,27 @@
 /**
  * SQLite storage for LimitRate events
+ *
+ * ⚠️  SECURITY: SQL INJECTION PREVENTION
+ *
+ * This file uses SQLite through better-sqlite3. To prevent SQL injection:
+ *
+ * 1. ALWAYS use parameterized queries with `?` placeholders
+ * 2. NEVER concatenate user input into SQL strings
+ * 3. NEVER use template literals for SQL queries with variables
+ *
+ * ✅ SAFE (parameterized query):
+ * ```typescript
+ * const stmt = db.prepare('SELECT * FROM events WHERE user = ?');
+ * stmt.all(userInput);
+ * ```
+ *
+ * ❌ UNSAFE (string concatenation):
+ * ```typescript
+ * db.exec(`SELECT * FROM events WHERE user = '${userInput}'`);
+ * ```
+ *
+ * All queries in this file follow parameterized query patterns.
+ * DO NOT modify to use string concatenation or template literals.
  */
 
 import Database from 'better-sqlite3';
@@ -69,6 +91,9 @@ export class EventStorage {
 
   /**
    * Save an event to storage
+   *
+   * SECURITY: Uses parameterized query to prevent SQL injection.
+   * The `?` placeholders ensure all values are properly escaped.
    */
   saveEvent(event: LimitRateEvent): void {
     try {
@@ -113,6 +138,11 @@ export class EventStorage {
 
   /**
    * Get top offenders (users with most blocks)
+   *
+   * SECURITY: Uses parameterized query with `?` placeholder for limit.
+   * User input is safely passed as parameter, not concatenated.
+   *
+   * @param limit - Maximum number of offenders to return (default: 10)
    */
   getTopOffenders(limit: number = 10): TopOffender[] {
     const stmt = this.db.prepare(`
@@ -133,6 +163,10 @@ export class EventStorage {
 
   /**
    * Get recent events
+   *
+   * SECURITY: Uses parameterized query with `?` placeholder for limit.
+   *
+   * @param limit - Maximum number of events to return (default: 10)
    */
   getRecentEvents(limit: number = 10): StoredEvent[] {
     const stmt = this.db.prepare(`

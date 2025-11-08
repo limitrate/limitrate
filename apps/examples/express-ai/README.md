@@ -88,9 +88,24 @@ curl -X POST http://localhost:3002/api/ask \
 
 LimitRate estimates costs **before** making API calls using:
 
-1. **Token Estimation**: ~4 characters = 1 token
+1. **Token Estimation**: ~4 characters = 1 token (±30-50% accuracy)
 2. **Model Pricing**: Based on official OpenAI pricing
 3. **Pre-request Check**: Blocks requests that would exceed cap
+
+**For more accurate cost tracking (±5-10%)**, see the tiktoken example:
+```bash
+# Run the tiktoken comparison demo
+npx tsx src/tiktoken-example.ts
+
+# Compare char/4 vs tiktoken accuracy
+curl -X POST http://localhost:3003/api/compare \
+  -H "Content-Type: application/json" \
+  -d '{"prompt":"Your test prompt here"}'
+```
+
+**Accuracy comparison:**
+- `char/4`: Fast (0.001ms), ±30-50% accuracy - Good for budget guardrails
+- `tiktoken`: Slower (0.1ms), ±5-10% accuracy - Better for cost attribution
 
 ### Model Pricing (per 1M tokens)
 

@@ -1,5 +1,28 @@
 # @limitrate/express
 
+## 3.0.1
+
+### Patch Changes
+
+- **v3.0.1 - Code Cleanup & Bug Fixes**
+
+  **Security Fix:**
+
+  - Fixed critical CIDR IP matching bug in `isIPInList()` - now uses proper bitwise subnet calculation instead of string prefix matching
+
+  **Code Quality Improvements:**
+
+  - Extracted magic numbers to named constants in MemoryStore (DEFAULT_MAX_KEYS, DEFAULT_CLEANUP_INTERVAL_MS)
+  - Removed duplicate `sleep()` functions - consolidated into shared `packages/express/src/utils/sleep.ts`
+  - Cleaned up old feature reference comments from v3.0.0 migration
+
+  **Internal:**
+
+  - Deferred Lua script extraction due to complexity (Redis/Upstash have different parameter orders)
+
+- Updated dependencies
+  - @limitrate/core@3.0.1
+
 ## 3.0.0
 
 ### Major Changes

@@ -12,23 +12,38 @@ export type { RedisStoreOptions, UpstashStoreOptions };
 
 /**
  * Create a store from config (internal, for middleware)
+ * Fix #7: Pass configuration options to stores
  */
 export function createStore(config: StoreConfig): Store {
   switch (config.type) {
     case 'memory':
-      return new MemoryStore();
+      return new MemoryStore({
+        maxKeys: config.maxKeys,
+        cleanupIntervalMs: config.cleanupIntervalMs,
+        maxKeysPerUser: config.maxKeysPerUser,
+      });
 
     case 'redis':
       if (!config.url) {
         throw new Error('Redis store requires url');
       }
-      return new RedisStore({ client: config.url, redisOptions: config.options });
+      return new RedisStore({
+        client: config.url,
+        redisOptions: config.options,
+        circuitBreakerThreshold: config.circuitBreakerThreshold,
+        circuitBreakerTimeoutMs: config.circuitBreakerTimeoutMs,
+      });
 
     case 'upstash':
       if (!config.url || !config.token) {
         throw new Error('Upstash store requires url and token');
       }
-      return new UpstashStore({ url: config.url, token: config.token });
+      return new UpstashStore({
+        url: config.url,
+        token: config.token,
+        circuitBreakerThreshold: config.circuitBreakerThreshold,
+        circuitBreakerTimeoutMs: config.circuitBreakerTimeoutMs,
+      });
 
     default:
       throw new Error(`Unknown store type: ${(config as any).type}`);

@@ -13,6 +13,7 @@ import type {
   UserOverride,
 } from './types';
 import { EventEmitter } from './utils/events';
+import { logger } from './logger';
 
 export interface CheckContext {
   /** User identifier */
@@ -97,7 +98,19 @@ export class PolicyEngine {
     // Store details from checks
     let finalDetails = { used: 0, limit: 0, remaining: 0, resetInSeconds: 0 };
 
-    // Check rate limit first (if defined)
+    // Fix #3: Check cost BEFORE rate to prevent partial failure bug
+    // If cost check fails after rate check increments counter, user loses a request
+    // Cost checks are non-incrementing (check-and-set), so they're safe to do first
+    if (policy.cost) {
+      const costResult = await this.checkCost(context, policy);
+      // Return early if blocked OR requires special handling (slowdown, allow-and-log)
+      if (!costResult.allowed || costResult.action !== 'allow') {
+        return costResult;
+      }
+      // Cost tracking is internal, rate limits are what users see
+    }
+
+    // Check rate limit (if defined)
     if (policy.rate) {
       const rateResult = await this.checkRate(context, policy);
       // Return early if blocked OR requires special handling (slowdown, allow-and-log)
@@ -110,23 +123,12 @@ export class PolicyEngine {
 
     // Check token limits (if defined and tokens provided) - v1.4.0
     if (policy.rate && context.tokens !== undefined && context.tokens > 0) {
-      const tokenResult = await this.checkTokens(context, policy);
+      const tokenResult = await this.checkTokens(context, policy, finalDetails);
       // Return early if blocked OR requires special handling
       if (!tokenResult.allowed || tokenResult.action !== 'allow') {
         return tokenResult;
       }
       // Token checks are additional to rate limits
-    }
-
-    // Check cost limit (if defined)
-    if (policy.cost) {
-      const costResult = await this.checkCost(context, policy);
-      // Return early if blocked OR requires special handling (slowdown, allow-and-log)
-      if (!costResult.allowed || costResult.action !== 'allow') {
-        return costResult;
-      }
-      // If both rate and cost exist, keep rate details for headers
-      // Cost tracking is internal, rate limits are what users see
     }
 
     // Both checks passed (or no checks defined)
@@ -315,10 +317,37 @@ export class PolicyEngine {
       return { allowed: true, action: 'allow', details: { used: 0, limit: 0, remaining: 0, resetInSeconds: 0 } };
     }
 
-    const { estimateCost, hourlyCap, dailyCap, actionOnExceed } = policy.cost;
+    const { estimateCost, hourlyCap, dailyCap, actionOnExceed, costEstimationTimeoutMs = 5000 } = policy.cost;
 
-    // Estimate cost for this request
-    const cost = estimateCost(context.costContext);
+    // Fix #4: Estimate cost for this request with timeout to prevent hanging
+    let cost: number;
+    try {
+      // Wrap estimateCost with Promise.race to add timeout
+      const costPromise = Promise.resolve(estimateCost(context.costContext));
+      const timeoutPromise = new Promise<number>((_, reject) => {
+        setTimeout(() => reject(new Error(`estimateCost timeout after ${costEstimationTimeoutMs}ms`)), costEstimationTimeoutMs);
+      });
+
+      cost = await Promise.race([costPromise, timeoutPromise]);
+    } catch (error) {
+      // If estimateCost throws or times out, fail closed with maximum cost to prevent bypass
+      logger.error('[LimitRate Engine] estimateCost() failed:', error);
+      const cap = dailyCap ?? hourlyCap!;
+      cost = cap; // Use maximum cost to ensure rate limit is applied
+    }
+
+    // Validate cost: must be a finite, positive number (not NaN or Infinity)
+    if (
+      typeof cost !== 'number' ||
+      Number.isNaN(cost) ||
+      !Number.isFinite(cost) ||
+      cost < 0
+    ) {
+      // Invalid cost: fail closed with maximum cost
+      const cap = dailyCap ?? hourlyCap!;
+      cost = cap;
+      logger.error(`[LimitRate Engine] Invalid cost returned from estimateCost(): ${cost}. Using maximum cost (${cap}) to fail closed.`);
+    }
 
     // Use daily cap if specified, otherwise hourly
     const cap = dailyCap ?? hourlyCap!;
@@ -327,7 +356,11 @@ export class PolicyEngine {
     // Build cost key: user:endpoint:cost
     const costKey = `${context.user}:${context.endpoint}:cost`;
 
-    // Check with store
+    // ATOMICITY: incrementCost is atomic across all stores.
+    // - Redis/Upstash: Uses atomic Lua scripts (EVAL command)
+    // - MemoryStore: Synchronous operations (JavaScript single-threaded)
+    // If result.allowed=false, cost was NOT incremented (check-and-set is atomic)
+    // If result.allowed=true, cost WAS incremented AND we're under cap
     const result = await this.store.incrementCost(costKey, cost, windowSeconds, cap);
 
     if (result.allowed) {
@@ -416,10 +449,11 @@ export class PolicyEngine {
 
   /**
    * Check token limits (v1.4.0 - AI feature)
+   * Fix #1: Accept finalDetails to preserve rate check data for response headers
    */
-  private async checkTokens(context: CheckContext, policy: EndpointPolicy): Promise<CheckResult> {
+  private async checkTokens(context: CheckContext, policy: EndpointPolicy, finalDetails?: CheckResult['details']): Promise<CheckResult> {
     if (!policy.rate || !context.tokens) {
-      return { allowed: true, action: 'allow', details: { used: 0, limit: 0, remaining: 0, resetInSeconds: 0 } };
+      return { allowed: true, action: 'allow', details: finalDetails || { used: 0, limit: 0, remaining: 0, resetInSeconds: 0 } };
     }
 
     const { maxTokensPerMinute, maxTokensPerHour, maxTokensPerDay, actionOnExceed, slowdownMs } = policy.rate;
@@ -468,13 +502,14 @@ export class PolicyEngine {
         });
 
         // Determine action
+        // Fix #1: Preserve finalDetails from rate check for response headers
         if (actionOnExceed === 'block') {
           return {
             allowed: false,
             action: 'block',
             reason: 'token_limit_exceeded',
             retryAfterSeconds: result.resetInSeconds,
-            details: {
+            details: finalDetails || {
               used: result.current,
               limit: result.limit,
               remaining: 0,
@@ -497,7 +532,7 @@ export class PolicyEngine {
             allowed: true,
             action: 'slowdown',
             slowdownMs,
-            details: {
+            details: finalDetails || {
               used: result.current,
               limit: result.limit,
               remaining: 0,
@@ -510,7 +545,7 @@ export class PolicyEngine {
           return {
             allowed: true,
             action: 'allow-and-log',
-            details: {
+            details: finalDetails || {
               used: result.current,
               limit: result.limit,
               remaining: 0,
@@ -523,7 +558,7 @@ export class PolicyEngine {
         return {
           allowed: true,
           action: 'allow',
-          details: {
+          details: finalDetails || {
             used: result.current,
             limit: result.limit,
             remaining: 0,
@@ -546,7 +581,7 @@ export class PolicyEngine {
     return {
       allowed: true,
       action: 'allow',
-      details: { used: 0, limit: 0, remaining: 0, resetInSeconds: 0 },
+      details: finalDetails || { used: 0, limit: 0, remaining: 0, resetInSeconds: 0 },
     };
   }
 
@@ -580,5 +615,20 @@ export class PolicyEngine {
    */
   getEventEmitter(): EventEmitter {
     return this.events;
+  }
+
+  /**
+   * Remove all event listeners (prevents memory leaks)
+   */
+  removeAllListeners(): void {
+    this.events.clear();
+  }
+
+  /**
+   * Close engine and cleanup resources
+   */
+  async close(): Promise<void> {
+    this.removeAllListeners();
+    await this.store.close();
   }
 }

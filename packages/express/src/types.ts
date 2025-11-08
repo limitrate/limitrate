@@ -47,6 +47,15 @@ export interface LimitRateOptions {
   trustProxy?: boolean;
 
   /**
+   * V4: Number of trusted proxies to skip in X-Forwarded-For header
+   * When set, skips N rightmost IPs to get the real client IP
+   * @example trustedProxyCount: 1 // Skip last IP (your proxy)
+   * @example trustedProxyCount: 2 // Skip last 2 IPs (proxy + CDN)
+   * @default undefined (uses leftmost IP when trustProxy=true)
+   */
+  trustedProxyCount?: number;
+
+  /**
    * IP addresses that always pass (skip all checks)
    */
   ipAllowlist?: string[];

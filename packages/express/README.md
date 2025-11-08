@@ -421,6 +421,29 @@ app.use(limitrate({
 }));
 ```
 
+**Understanding Slowdown vs Block:**
+
+Slowdown is a UX feature for paid tiers, NOT a server protection mechanism.
+
+**What slowdown does:**
+- Adds artificial delay (e.g., 500ms) before allowing the request
+- User still gets their response (better UX than hard block)
+- Good for: pro/enterprise tiers where you want soft limits
+
+**What slowdown does NOT do:**
+- Does NOT reduce server load (request still processes)
+- Does NOT save API costs (AI call still happens)
+- Does NOT protect against DDoS (just delays the attack)
+
+**When to use slowdown:**
+- Paid tiers: Soft limits for better UX ("please slow down")
+- Rate smoothing: Encourage better client behavior
+
+**When to use block:**
+- Free tiers: Hard enforcement to prevent abuse
+- Cost caps: Prevent budget overruns
+- DDoS protection: Stop malicious traffic
+
 ## TypeScript Support
 
 Full TypeScript support with exported types:

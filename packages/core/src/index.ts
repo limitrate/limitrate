@@ -79,6 +79,6 @@ export {
   clearAllLimiters,
 } from './concurrency/index';
 
-// Removed in v3.0.0: Penalty/Reward System (D4) - Implement via getUserOverride() if needed
-// Removed in v3.0.0: IPv6 Subnet Limiting (D5) - Handle at CDN/proxy layer
-// Removed in v3.0.0: Job Scheduler (D6) - Use Bull/BullMQ for job queuing
+// Logger (v3.1.2)
+export type { Logger } from './logger';
+export { setLogger, getLogger, createSilentLogger, createConsoleLogger, logger } from './logger';

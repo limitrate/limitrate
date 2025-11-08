@@ -3,6 +3,7 @@
  */
 
 import type { LimitRateEvent } from '../types';
+import { logger } from '../logger';
 
 export type EventHandler = (event: LimitRateEvent) => void | Promise<void>;
 
@@ -40,13 +41,24 @@ export class EventEmitter {
           promises.push(result);
         }
       } catch (error) {
-        console.error('[LimitRate] Event handler error:', error);
+        logger.error('[LimitRate] Event handler error:', error);
       }
     }
 
     // Wait for all async handlers
     if (promises.length > 0) {
-      await Promise.allSettled(promises);
+      const results = await Promise.allSettled(promises);
+
+      // BUG FIX #5: Log rejected promises so failures aren't silent
+      for (let i = 0; i < results.length; i++) {
+        const result = results[i];
+        if (result.status === 'rejected') {
+          logger.error(
+            `[LimitRate] Async event handler failed for event "${event.type}":`,
+            result.reason
+          );
+        }
+      }
     }
   }
 

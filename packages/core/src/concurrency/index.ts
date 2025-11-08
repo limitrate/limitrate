@@ -7,5 +7,7 @@ export {
   ConcurrencyLimiter,
   getConcurrencyLimiter,
   clearAllLimiters,
-  type ConcurrencyConfig,
 } from './limiter';
+
+// Re-export ConcurrencyConfig from types
+export type { ConcurrencyConfig } from '../types';

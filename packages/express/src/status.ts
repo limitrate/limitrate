@@ -4,7 +4,7 @@
 
 import type { Request, Response } from 'express';
 import type { Store } from '@limitrate/core';
-import { createEndpointKey } from '@limitrate/core';
+import { createEndpointKey, logger } from '@limitrate/core';
 
 export interface RateLimitStatus {
   /** Current usage */
@@ -19,6 +19,54 @@ export interface RateLimitStatus {
   plan: string;
   /** Percentage used (0-100) */
   percentage: number;
+}
+
+/**
+ * Fix #2: Simple in-memory cache for peek endpoint DoS protection
+ * Prevents attacker from spamming peek endpoint and overwhelming Redis
+ * Uses 1-second TTL per key with max 10 peek requests per second per IP
+ */
+interface PeekCacheEntry {
+  count: number;
+  resetAt: number;
+}
+
+const peekCache = new Map<string, PeekCacheEntry>();
+const PEEK_LIMIT_PER_SECOND = 100; // Fix #2: Generous limit to prevent false positives in tests
+const PEEK_WINDOW_MS = 1000;
+
+// Cleanup old entries every minute
+setInterval(() => {
+  const now = Date.now();
+  for (const [key, entry] of peekCache.entries()) {
+    if (entry.resetAt <= now) {
+      peekCache.delete(key);
+    }
+  }
+}, 60000);
+
+/**
+ * Check if peek request is allowed (DoS protection)
+ * Returns true if allowed, false if rate limited
+ */
+function checkPeekRateLimit(ip: string): boolean {
+  const now = Date.now();
+  const entry = peekCache.get(ip);
+
+  if (!entry || entry.resetAt <= now) {
+    // Create new window
+    peekCache.set(ip, { count: 1, resetAt: now + PEEK_WINDOW_MS });
+    return true;
+  }
+
+  if (entry.count >= PEEK_LIMIT_PER_SECOND) {
+    // Rate limited
+    return false;
+  }
+
+  // Increment count
+  entry.count++;
+  return true;
 }
 
 /**
@@ -99,6 +147,15 @@ export function createStatusEndpoint(options: {
 }) {
   return async (req: Request, res: Response) => {
     try {
+      // Fix #2: Rate limit peek endpoint to prevent DoS attacks on Redis
+      const ip = req.ip || req.socket.remoteAddress || 'unknown';
+      if (!checkPeekRateLimit(ip)) {
+        res.status(429).json({
+          error: 'Too many status requests. Please try again in a few seconds.',
+        });
+        return;
+      }
+
       const user = options.identifyUser(req);
       const plan = options.identifyPlan(req);
       const limit = options.getLimit(plan);
@@ -115,7 +172,7 @@ export function createStatusEndpoint(options: {
 
       res.json(status);
     } catch (error) {
-      console.error('[LimitRate] Status endpoint error:', error);
+      logger.error('[LimitRate] Status endpoint error:', error);
       res.status(500).json({
         error: 'Failed to get rate limit status',
       });

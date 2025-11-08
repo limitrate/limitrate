@@ -5,6 +5,41 @@
 
 import { Redis } from '@upstash/redis';
 import type { Store, RateCheckResult, CostCheckResult, TokenCheckResult } from '../types';
+import { logger } from '../logger';
+
+/**
+ * Simple circuit breaker to prevent cascade failures in fail-closed mode
+ * Fix #7: Make threshold and timeout configurable
+ */
+class CircuitBreaker {
+  private failures = 0;
+  private lastFailure = 0;
+  private readonly threshold: number;
+  private readonly timeout: number;
+
+  constructor(threshold: number = 5, timeout: number = 30000) {
+    this.threshold = threshold;
+    this.timeout = timeout;
+  }
+
+  recordFailure(): void {
+    this.failures++;
+    this.lastFailure = Date.now();
+  }
+
+  recordSuccess(): void {
+    this.failures = 0;
+  }
+
+  isOpen(): boolean {
+    if (this.failures < this.threshold) return false;
+    if (Date.now() - this.lastFailure > this.timeout) {
+      this.failures = 0; // Reset after timeout
+      return false;
+    }
+    return true;
+  }
+}
 
 // Same Lua scripts as Redis store
 const RATE_CHECK_SCRIPT = `
@@ -32,6 +67,9 @@ local ttl = redis.call('TTL', key)
 return {current + 1, limit - current - 1, ttl, limit}
 `;
 
+// NOTE: Burst tokens do NOT refill over time. They reset when the rate limit window resets.
+// This is a "fixed burst allowance per window" model, not a "token bucket" model.
+// Both rateKey and burstKey share the same TTL and reset together when the window expires.
 const RATE_CHECK_BURST_SCRIPT = `
 local rateKey = KEYS[1]
 local burstKey = KEYS[2]
@@ -137,6 +175,12 @@ export interface UpstashStoreOptions {
   token: string;
   /** Key prefix for all LimitRate keys */
   keyPrefix?: string;
+  /** Error handling strategy: 'fail-open' (allow requests) or 'fail-closed' (block requests). Default: 'fail-open' */
+  onError?: 'fail-open' | 'fail-closed';
+  /** Circuit breaker failure threshold (default: 5) - Fix #7 */
+  circuitBreakerThreshold?: number;
+  /** Circuit breaker timeout in ms (default: 30000) - Fix #7 */
+  circuitBreakerTimeoutMs?: number;
 }
 
 export class UpstashStore implements Store {
@@ -144,6 +188,8 @@ export class UpstashStore implements Store {
   private keyPrefix: string;
   private url: string;
   private token: string;
+  private onError: 'fail-open' | 'fail-closed';
+  private circuitBreaker: CircuitBreaker;
 
   constructor(options: UpstashStoreOptions) {
     if (!options.url || !options.token) {
@@ -151,8 +197,14 @@ export class UpstashStore implements Store {
     }
 
     this.keyPrefix = options.keyPrefix ?? 'limitrate:';
+    this.onError = options.onError ?? 'fail-open';
     this.url = options.url;
     this.token = options.token;
+    // Fix #7: Pass configurable threshold and timeout to circuit breaker
+    this.circuitBreaker = new CircuitBreaker(
+      options.circuitBreakerThreshold,
+      options.circuitBreakerTimeoutMs
+    );
     this.client = new Redis({
       url: options.url,
       token: options.token,
@@ -196,6 +248,8 @@ export class UpstashStore implements Store {
 
       const [current, remaining, resetInSeconds, returnedLimit] = result;
 
+      this.circuitBreaker.recordSuccess();
+
       return {
         allowed: current <= limit,
         current,
@@ -204,8 +258,31 @@ export class UpstashStore implements Store {
         limit: returnedLimit,
       };
     } catch (error) {
-      console.error('[LimitRate] Upstash rate check error:', error);
-      throw error;
+      logger.error('[LimitRate] Upstash rate check error:', error);
+
+      if (this.onError === 'fail-closed') {
+        if (this.circuitBreaker.isOpen()) {
+          logger.warn('[LimitRate] Circuit breaker OPEN - allowing requests');
+          return {
+            allowed: true,
+            current: 0,
+            remaining: limit,
+            resetInSeconds: windowSeconds,
+            limit,
+          };
+        }
+        this.circuitBreaker.recordFailure();
+        throw error;
+      }
+
+      // Fail-open: return safe defaults (allow the request)
+      return {
+        allowed: true,
+        current: 0,
+        remaining: limit,
+        resetInSeconds: windowSeconds,
+        limit,
+      };
     }
   }
 
@@ -234,6 +311,8 @@ export class UpstashStore implements Store {
       const resetInSeconds = (ttlData.result && ttlData.result > 0) ? ttlData.result : windowSeconds;
       const remaining = Math.max(0, limit - current);
 
+      this.circuitBreaker.recordSuccess();
+
       return {
         allowed: current < limit,
         current,
@@ -242,8 +321,31 @@ export class UpstashStore implements Store {
         limit,
       };
     } catch (error) {
-      console.error('[LimitRate] Upstash peek rate error:', error);
-      throw error;
+      logger.error('[LimitRate] Upstash peek rate error:', error);
+
+      if (this.onError === 'fail-closed') {
+        if (this.circuitBreaker.isOpen()) {
+          logger.warn('[LimitRate] Circuit breaker OPEN - allowing requests');
+          return {
+            allowed: true,
+            current: 0,
+            remaining: limit,
+            resetInSeconds: windowSeconds,
+            limit,
+          };
+        }
+        this.circuitBreaker.recordFailure();
+        throw error;
+      }
+
+      // Fail-open: return safe defaults (allow the request)
+      return {
+        allowed: true,
+        current: 0,
+        remaining: limit,
+        resetInSeconds: windowSeconds,
+        limit,
+      };
     }
   }
 
@@ -264,6 +366,8 @@ export class UpstashStore implements Store {
 
       const [current, allowed, remaining, resetInSeconds, returnedCap] = result;
 
+      this.circuitBreaker.recordSuccess();
+
       return {
         allowed: allowed === 1,
         current,
@@ -272,8 +376,31 @@ export class UpstashStore implements Store {
         cap: returnedCap,
       };
     } catch (error) {
-      console.error('[LimitRate] Upstash cost increment error:', error);
-      throw error;
+      logger.error('[LimitRate] Upstash cost increment error:', error);
+
+      if (this.onError === 'fail-closed') {
+        if (this.circuitBreaker.isOpen()) {
+          logger.warn('[LimitRate] Circuit breaker OPEN - allowing requests');
+          return {
+            allowed: true,
+            current: 0,
+            remaining: cap,
+            resetInSeconds: windowSeconds,
+            cap,
+          };
+        }
+        this.circuitBreaker.recordFailure();
+        throw error;
+      }
+
+      // Fail-open: return safe defaults (allow the request)
+      return {
+        allowed: true,
+        current: 0,
+        remaining: cap,
+        resetInSeconds: windowSeconds,
+        cap,
+      };
     }
   }
 
@@ -294,6 +421,8 @@ export class UpstashStore implements Store {
 
       const [current, allowed, remaining, resetInSeconds, returnedLimit] = result;
 
+      this.circuitBreaker.recordSuccess();
+
       return {
         allowed: allowed === 1,
         current,
@@ -302,8 +431,31 @@ export class UpstashStore implements Store {
         limit: returnedLimit,
       };
     } catch (error) {
-      console.error('[LimitRate] Upstash token increment error:', error);
-      throw error;
+      logger.error('[LimitRate] Upstash token increment error:', error);
+
+      if (this.onError === 'fail-closed') {
+        if (this.circuitBreaker.isOpen()) {
+          logger.warn('[LimitRate] Circuit breaker OPEN - allowing requests');
+          return {
+            allowed: true,
+            current: 0,
+            remaining: limit,
+            resetInSeconds: windowSeconds,
+            limit,
+          };
+        }
+        this.circuitBreaker.recordFailure();
+        throw error;
+      }
+
+      // Fail-open: return safe defaults (allow the request)
+      return {
+        allowed: true,
+        current: 0,
+        remaining: limit,
+        resetInSeconds: windowSeconds,
+        limit,
+      };
     }
   }
 

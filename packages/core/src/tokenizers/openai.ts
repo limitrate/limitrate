@@ -4,6 +4,7 @@
  */
 
 import type { Tokenizer } from './index.js';
+import { logger } from '../logger';
 
 /**
  * Create OpenAI tokenizer using tiktoken
@@ -16,7 +17,7 @@ import type { Tokenizer } from './index.js';
  * ```typescript
  * const tokenizer = await createOpenAITokenizer('gpt-4');
  * const count = await tokenizer.count('Hello world');
- * console.log(`Tokens: ${count}`);
+ * logger.info(`Tokens: ${count}`);
  * ```
  */
 export async function createOpenAITokenizer(model: string): Promise<Tokenizer> {
@@ -49,7 +50,7 @@ export async function createOpenAITokenizer(model: string): Promise<Tokenizer> {
     encoding = tiktoken.encoding_for_model(encodingModel as any);
   } catch (error) {
     // If model not recognized, use cl100k_base (GPT-4 encoding)
-    console.warn(`[LimitRate] Unknown OpenAI model "${model}", using cl100k_base encoding`);
+    logger.warn(`[LimitRate] Unknown OpenAI model "${model}", using cl100k_base encoding`);
     encoding = tiktoken.get_encoding('cl100k_base');
   }
 

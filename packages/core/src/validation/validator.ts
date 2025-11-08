@@ -208,7 +208,7 @@ export async function validatePrompt(options: ValidationOptions): Promise<Valida
  * ```typescript
  * const result = await validatePrompt(options);
  * if (!result.valid) {
- *   console.error(formatValidationError(result));
+ *   logger.error(formatValidationError(result));
  * }
  * ```
  */

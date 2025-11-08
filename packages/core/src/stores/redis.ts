@@ -5,6 +5,7 @@
 
 import Redis from 'ioredis';
 import type { Store, RateCheckResult, CostCheckResult, TokenCheckResult } from '../types';
+import { logger } from '../logger';
 
 // Lua script for peeking at rate without incrementing (v1.7.0 - B5)
 const RATE_PEEK_SCRIPT = `
@@ -51,6 +52,9 @@ return {current + 1, limit - current - 1, ttl, limit}
 `;
 
 // Lua script for atomic rate check with burst support
+// NOTE: Burst tokens do NOT refill over time. They reset when the rate limit window resets.
+// This is a "fixed burst allowance per window" model, not a "token bucket" model.
+// Both rateKey and burstKey share the same TTL and reset together when the window expires.
 const RATE_CHECK_BURST_SCRIPT = `
 local rateKey = KEYS[1]
 local burstKey = KEYS[2]
@@ -154,6 +158,40 @@ local ttl = redis.call('TTL', key)
 return {newTokens, true, limit - newTokens, ttl, limit}
 `;
 
+/**
+ * Simple circuit breaker to prevent cascade failures in fail-closed mode
+ * Fix #7: Make threshold and timeout configurable
+ */
+class CircuitBreaker {
+  private failures = 0;
+  private lastFailure = 0;
+  private readonly threshold: number;
+  private readonly timeout: number;
+
+  constructor(threshold: number = 5, timeout: number = 30000) {
+    this.threshold = threshold;
+    this.timeout = timeout;
+  }
+
+  recordFailure(): void {
+    this.failures++;
+    this.lastFailure = Date.now();
+  }
+
+  recordSuccess(): void {
+    this.failures = 0;
+  }
+
+  isOpen(): boolean {
+    if (this.failures < this.threshold) return false;
+    if (Date.now() - this.lastFailure > this.timeout) {
+      this.failures = 0; // Reset after timeout
+      return false;
+    }
+    return true;
+  }
+}
+
 export interface RedisStoreOptions {
   /** Redis connection URL or ioredis instance */
   client?: Redis | string;
@@ -161,16 +199,30 @@ export interface RedisStoreOptions {
   keyPrefix?: string;
   /** Redis client options (if URL provided) */
   redisOptions?: any;
+  /** Error handling strategy: 'fail-open' (allow requests) or 'fail-closed' (block requests). Default: 'fail-open' */
+  onError?: 'fail-open' | 'fail-closed';
+  /** Circuit breaker failure threshold (default: 5) - Fix #7 */
+  circuitBreakerThreshold?: number;
+  /** Circuit breaker timeout in ms (default: 30000) - Fix #7 */
+  circuitBreakerTimeoutMs?: number;
 }
 
 export class RedisStore implements Store {
   private client: Redis;
   private ownClient: boolean;
   private keyPrefix: string;
+  private onError: 'fail-open' | 'fail-closed';
+  private circuitBreaker: CircuitBreaker;
 
   constructor(options: RedisStoreOptions = {}) {
     this.keyPrefix = options.keyPrefix ?? 'limitrate:';
+    this.onError = options.onError ?? 'fail-open';
     this.ownClient = false;
+    // Fix #7: Pass configurable threshold and timeout to circuit breaker
+    this.circuitBreaker = new CircuitBreaker(
+      options.circuitBreakerThreshold,
+      options.circuitBreakerTimeoutMs
+    );
 
     if (options.client instanceof Redis) {
       // Use provided client
@@ -229,6 +281,8 @@ export class RedisStore implements Store {
 
       const [current, remaining, resetInSeconds, returnedLimit] = result as number[];
 
+      this.circuitBreaker.recordSuccess();
+
       return {
         allowed: current <= limit,
         current,
@@ -237,9 +291,32 @@ export class RedisStore implements Store {
         limit: returnedLimit,
       };
     } catch (error) {
-      // Log error and rethrow
-      console.error('[LimitRate] Redis rate check error:', error);
-      throw error;
+      logger.error('[LimitRate] Redis rate check error:', error);
+
+      if (this.onError === 'fail-closed') {
+        // Circuit breaker: temporarily fail-open to prevent cascade failures
+        if (this.circuitBreaker.isOpen()) {
+          logger.warn('[LimitRate] Circuit breaker OPEN - allowing requests to prevent cascade failure');
+          return {
+            allowed: true,
+            current: 0,
+            remaining: limit,
+            resetInSeconds: windowSeconds,
+            limit,
+          };
+        }
+        this.circuitBreaker.recordFailure();
+        throw error;
+      }
+
+      // Fail-open: return safe defaults (allow the request)
+      return {
+        allowed: true,
+        current: 0,
+        remaining: limit,
+        resetInSeconds: windowSeconds,
+        limit,
+      };
     }
   }
 
@@ -257,6 +334,8 @@ export class RedisStore implements Store {
 
       const [current, remaining, resetInSeconds, returnedLimit] = result as number[];
 
+      this.circuitBreaker.recordSuccess();
+
       return {
         allowed: current < limit,
         current,
@@ -265,8 +344,31 @@ export class RedisStore implements Store {
         limit: returnedLimit,
       };
     } catch (error) {
-      console.error('[LimitRate] Redis peek rate error:', error);
-      throw error;
+      logger.error('[LimitRate] Redis peek rate error:', error);
+
+      if (this.onError === 'fail-closed') {
+        if (this.circuitBreaker.isOpen()) {
+          logger.warn('[LimitRate] Circuit breaker OPEN - allowing requests');
+          return {
+            allowed: true,
+            current: 0,
+            remaining: limit,
+            resetInSeconds: windowSeconds,
+            limit,
+          };
+        }
+        this.circuitBreaker.recordFailure();
+        throw error;
+      }
+
+      // Fail-open: return safe defaults (allow the request)
+      return {
+        allowed: true,
+        current: 0,
+        remaining: limit,
+        resetInSeconds: windowSeconds,
+        limit,
+      };
     }
   }
 
@@ -296,6 +398,8 @@ export class RedisStore implements Store {
         number
       ];
 
+      this.circuitBreaker.recordSuccess();
+
       return {
         allowed: allowed === 1,
         current,
@@ -304,8 +408,31 @@ export class RedisStore implements Store {
         cap: returnedCap,
       };
     } catch (error) {
-      console.error('[LimitRate] Redis cost increment error:', error);
-      throw error;
+      logger.error('[LimitRate] Redis cost increment error:', error);
+
+      if (this.onError === 'fail-closed') {
+        if (this.circuitBreaker.isOpen()) {
+          logger.warn('[LimitRate] Circuit breaker OPEN - allowing requests');
+          return {
+            allowed: true,
+            current: 0,
+            remaining: cap,
+            resetInSeconds: windowSeconds,
+            cap,
+          };
+        }
+        this.circuitBreaker.recordFailure();
+        throw error;
+      }
+
+      // Fail-open: return safe defaults (allow the request)
+      return {
+        allowed: true,
+        current: 0,
+        remaining: cap,
+        resetInSeconds: windowSeconds,
+        cap,
+      };
     }
   }
 
@@ -335,6 +462,8 @@ export class RedisStore implements Store {
         number
       ];
 
+      this.circuitBreaker.recordSuccess();
+
       return {
         allowed: allowed === 1,
         current,
@@ -343,8 +472,31 @@ export class RedisStore implements Store {
         limit: returnedLimit,
       };
     } catch (error) {
-      console.error('[LimitRate] Redis token increment error:', error);
-      throw error;
+      logger.error('[LimitRate] Redis token increment error:', error);
+
+      if (this.onError === 'fail-closed') {
+        if (this.circuitBreaker.isOpen()) {
+          logger.warn('[LimitRate] Circuit breaker OPEN - allowing requests');
+          return {
+            allowed: true,
+            current: 0,
+            remaining: limit,
+            resetInSeconds: windowSeconds,
+            limit,
+          };
+        }
+        this.circuitBreaker.recordFailure();
+        throw error;
+      }
+
+      // Fail-open: return safe defaults (allow the request)
+      return {
+        allowed: true,
+        current: 0,
+        remaining: limit,
+        resetInSeconds: windowSeconds,
+        limit,
+      };
     }
   }
 

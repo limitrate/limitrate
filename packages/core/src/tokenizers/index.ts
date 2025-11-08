@@ -3,6 +3,8 @@
  * Supports OpenAI (tiktoken) and Anthropic tokenizers as optional dependencies
  */
 
+import { logger } from '../logger';
+
 export interface Tokenizer {
   /**
    * Count tokens in text or array of texts
@@ -89,7 +91,7 @@ export async function createTokenizer(
       return tokenizer;
     } catch (error) {
       if (warnOnFallback) {
-        console.warn(
+        logger.warn(
           `[LimitRate] tiktoken not available for ${model}, using fallback tokenizer (length/4). ` +
             `Install with: npm install tiktoken`
         );
@@ -109,7 +111,7 @@ export async function createTokenizer(
       return tokenizer;
     } catch (error) {
       if (warnOnFallback) {
-        console.warn(
+        logger.warn(
           `[LimitRate] @anthropic-ai/sdk not available for ${model}, using fallback tokenizer (length/4). ` +
             `Install with: npm install @anthropic-ai/sdk`
         );
@@ -122,7 +124,7 @@ export async function createTokenizer(
 
   // Unknown model - use fallback
   if (warnOnFallback) {
-    console.warn(`[LimitRate] Unknown model "${model}", using fallback tokenizer (length/4)`);
+    logger.warn(`[LimitRate] Unknown model "${model}", using fallback tokenizer (length/4)`);
   }
   tokenizer = createFallbackTokenizer(model);
   tokenizerCache.set(model, tokenizer);

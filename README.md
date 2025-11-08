@@ -22,6 +22,49 @@ Drop in 20 lines of config, never worry about bots draining your AI budget or us
 
 ---
 
+## Important Warnings
+
+### Cost Estimation Accuracy
+
+**LimitRate estimates costs BEFORE requests hit your AI provider. This is not billing tracking.**
+
+**Accuracy levels:**
+- `char/4 estimation` (like examples in this repo): **±30-50% accuracy**
+  - Fast, no dependencies
+  - Good for: budget guardrails, preventing abuse
+  - Bad for: precise billing, cost attribution
+
+- `tiktoken-based estimation`: **±5-10% accuracy**
+  - Slower, requires tokenizer library
+  - Good for: more accurate pre-request limits
+  - Bad for: still not actual billing (doesn't include output tokens, system prompts, etc.)
+
+**Use cases:**
+- Use LimitRate to prevent catastrophic spend (e.g., $100/hour cap)
+- Use your AI provider's billing API for actual cost tracking
+- Don't rely on LimitRate for invoice-accurate cost tracking
+
+See [HONEST-LIMITATIONS.md](./HONEST-LIMITATIONS.md) for more details.
+
+### Production Deployment
+
+**MemoryStore is NOT production-safe:**
+
+| Store | Single Server | Multi-Server | Serverless | Notes |
+|-------|---------------|--------------|------------|-------|
+| MemoryStore | ⚠️ DEV ONLY | ❌ NO | ❌ NO | Data lost on restart, no sync across instances |
+| RedisStore | ✅ YES | ✅ YES | ⚠️ MAYBE | Requires persistent Redis connection |
+| UpstashStore | ✅ YES | ✅ YES | ✅ YES | HTTP-based, perfect for serverless |
+
+**Why MemoryStore fails in production:**
+- Data is lost when your server restarts
+- Each instance has its own state (user could hit 10 req/min on each of 5 servers = 50 total)
+- No persistence, no atomic operations across processes
+
+**Always use RedisStore or UpstashStore in production.**
+
+---
+
 ## Features
 
 - ✅ **Plan-Aware Policies** — Different limits for free/pro/enterprise tiers
@@ -192,6 +235,29 @@ rate: {
   slowdownMs: 1000 // Add 1s delay instead of blocking
 }
 ```
+
+**Understanding Slowdown vs Block:**
+
+Slowdown is a UX feature for paid tiers, NOT a server protection mechanism.
+
+**What slowdown does:**
+- Adds artificial delay (e.g., 500ms) before allowing the request
+- User still gets their response (better UX than hard block)
+- Good for: pro/enterprise tiers where you want soft limits
+
+**What slowdown does NOT do:**
+- Does NOT reduce server load (request still processes)
+- Does NOT save API costs (AI call still happens)
+- Does NOT protect against DDoS (just delays the attack)
+
+**When to use slowdown:**
+- Paid tiers: Soft limits for better UX ("please slow down")
+- Rate smoothing: Encourage better client behavior
+
+**When to use block:**
+- Free tiers: Hard enforcement to prevent abuse
+- Cost caps: Prevent budget overruns
+- DDoS protection: Stop malicious traffic
 
 ---
 

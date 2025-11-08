@@ -1,6 +1,6 @@
 {
   "name": "@limitrate/core",
-  "version": "3.0.0",
+  "version": "3.0.1",
   "description": "Core rate limiting and cost control engine for LimitRate",
   "main": "./dist/index.js",
   "module": "./dist/index.mjs",
@@ -46,7 +46,9 @@
     "access": "public"
   },
   "devDependencies": {
+    "@testcontainers/redis": "^10.0.0",
     "@types/node": "^20.11.0",
+    "testcontainers": "^10.0.0",
     "tsup": "^8.0.1",
     "typescript": "^5.3.3",
     "vitest": "^1.2.0"

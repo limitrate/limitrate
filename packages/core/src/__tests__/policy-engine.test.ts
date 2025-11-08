@@ -88,8 +88,7 @@ describe('PolicyEngine', () => {
       expect(result.reason).toBe('rate_exceeded');
     });
 
-    it.skip('should apply slowdown action for pro tier - SKIPPED: engine bug with details', async () => {
-      // TODO: Fix engine.ts line 113-117 - overwrites rate check details with zeros
+    it('should apply slowdown action for pro tier - Fix #1: Now preserves details', async () => {
       const engine = new PolicyEngine(store, policies);
 
       // Send 100 requests (at limit)
@@ -98,7 +97,6 @@ describe('PolicyEngine', () => {
           user: 'pro-user',
           plan: 'pro',
           endpoint: 'POST|/api/ask',
-          ip: '1.2.3.4',
         });
       }
 
@@ -107,13 +105,16 @@ describe('PolicyEngine', () => {
         user: 'pro-user',
         plan: 'pro',
         endpoint: 'POST|/api/ask',
-        ip: '1.2.3.4',
       });
 
       // Slowdown allows request but with delay
       expect(result.allowed).toBe(true);
       expect(result.action).toBe('slowdown');
       expect(result.slowdownMs).toBe(500);
+      // Fix #1: Details should be preserved from rate check
+      expect(result.details).toBeDefined();
+      expect(result.details.limit).toBe(100);
+      expect(result.details.used).toBeGreaterThan(0);
     });
 
     it('should apply default policy when endpoint not specified', async () => {

@@ -1,5 +1,13 @@
 # express-shared-store-example
 
+## 1.0.11
+
+### Patch Changes
+
+- Updated dependencies
+  - @limitrate/core@3.0.1
+  - @limitrate/express@3.0.1
+
 ## 1.0.10
 
 ### Patch Changes

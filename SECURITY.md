@@ -1,5 +1,21 @@
 # Security Policy
 
+## Security Grade: A- (Library-Level)
+
+LimitRate implements security best practices at the library level. However:
+
+**What this means:**
+- We follow OWASP guidelines for rate limiting
+- We use secure defaults (authenticated Redis, input validation)
+- We have no known critical vulnerabilities in our code
+
+**What this does NOT mean:**
+- We are NOT SOC2 or ISO27001 certified
+- We do NOT guarantee protection against all attack vectors
+- Security depends on YOUR deployment (Redis auth, TLS, network config)
+
+**Think of it as:** A well-built lock (A-), but you still need to install it correctly and lock your door.
+
 ## Supported Versions
 
 We release security updates for the following versions:
@@ -184,6 +200,26 @@ onEvent: (event) => {
   }
 }
 ```
+
+## Vulnerability Severity Levels
+
+LimitRate uses a clear severity classification:
+
+### CRITICAL
+- **V1: Spinlock Resource Exhaustion** - Can cause 100% CPU usage under specific race conditions
+- **V7: SSRF in Webhook URLs** - Unvalidated webhook URLs could access internal services
+
+### HIGH
+- **V6: ReDoS in IP Parsing** - Malicious CIDR patterns could cause regex denial of service
+
+### MEDIUM (Best Practices)
+- **V2: Redis Connection String Logging** - Credentials might appear in logs (configuration issue)
+- **V3: MemoryStore Production Use** - Not a vulnerability, but dangerous in production
+- **V4: Cost Estimation DoS** - Large inputs could slow down cost calculation
+- **V5: IP Spoofing** - Requires proper `trustProxy` configuration
+- **V8: Timing Attacks** - Theoretical timing leaks in rate limit checks
+
+**Note:** Most "vulnerabilities" are actually deployment best practices (use Redis auth, configure proxies correctly, etc.)
 
 ## Known Security Considerations
 

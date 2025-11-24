@@ -46,7 +46,7 @@
     "access": "public"
   },
   "devDependencies": {
-    "@testcontainers/redis": "^10.0.0",
+    "@testcontainers/redis": "^11.8.1",
     "@types/node": "^20.11.0",
     "testcontainers": "^10.0.0",
     "tsup": "^8.0.1",
